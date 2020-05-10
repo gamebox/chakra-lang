@@ -4,11 +4,10 @@
     <TargetFramework>netcoreapp3.1</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="Parser.fsproj">
-      <Name>Parser.fsproj</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
+    <Compile Include="ParserLibrary.fs" />
+    <Compile Include="ChakraParser.fs" />
+    <Compile Include="Command.fs" />
+    <Compile Include="Repl.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

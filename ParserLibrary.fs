@@ -1,3 +1,6 @@
+module ParserLibrary
+
+
 open System
 
 
@@ -37,7 +40,7 @@ type Parser<'a> =
 
 
 let initalPos = { line = 0; column = 0 }
-let incrCol pos = { pos with column = pos.column + 1 }
+let incrCol pos = { pos with Position.column = pos.column + 1 }
 let incrLine pos = { line = pos.line + 1; column = 0 }
 
 let fromStr str =

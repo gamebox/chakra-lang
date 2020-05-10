@@ -1,4 +1,4 @@
-#load "ParserLibrary.fsx"
+module ChakraParser
 
 open System
 open ParserLibrary
@@ -301,7 +301,7 @@ let chakraMatchExpr = chakraMatch |>> ChakraMatchExpr
 
 
 let chakraModule =
-    sepBy1 chakraBinding (pstring "\n\n" .>>. whitespace)
+    many1 chakraBinding
     |>> ChakraModule
 
 (* Set refs *)
@@ -354,10 +354,10 @@ let num200 = (ChakraNumber 200.0)
 let litExpr literal = (ChakraLiteralExpr literal)
 
 let simpleBinding literal =
-    (ChakraBinding(something, ChakraExprList([], literal)))
+    (ChakraBinding(something, ChakraExprList([], litExpr literal)))
 
 let complexBinding name bindings literal =
-    (ChakraBinding(ChakraSimpleBindingPattern name, ChakraExprList(bindings, literal)))
+    (ChakraBinding(ChakraSimpleBindingPattern name, ChakraExprList(bindings, litExpr literal)))
 
 let identifierTests () =
     printfn "Identifier tests"
@@ -528,13 +528,13 @@ let bindingTests () =
     test "binding to number" chakraBinding "something = 1" (simpleBinding numOne)
     test "binding to string" chakraBinding "something = \"else\"" (simpleBinding strElse)
     test "binding to symbol" chakraBinding "something = #one" (simpleBinding symOne)
-    test "binding to tuple" chakraBinding "something = ( #one #two )" (simpleBinding (ChakraTuple [ symOne; symTwo ]))
-    test "binding to list" chakraBinding "something = [ 1 2 ]" (simpleBinding (ChakraList [ numOne; numTwo ]))
-    test "binding to vector" chakraBinding "something = { 1 2 }" (simpleBinding (ChakraVector [ numOne; numTwo ]))
+    test "binding to tuple" chakraBinding "something = ( #one #two )" (simpleBinding (ChakraTuple [ litExpr symOne; litExpr symTwo ]))
+    test "binding to list" chakraBinding "something = [ 1 2 ]" (simpleBinding (ChakraList [ litExpr numOne; litExpr numTwo ]))
+    test "binding to vector" chakraBinding "something = { 1 2 }" (simpleBinding (ChakraVector [ litExpr numOne; litExpr numTwo ]))
     test "binding to struct" chakraBinding "something = ( something = 1 )"
-        (simpleBinding (ChakraStruct [ ("something", numOne) ]))
+        (simpleBinding (ChakraStruct [ ("something", litExpr numOne) ]))
     test "binding to map" chakraBinding "something = [ \"something\" = 1 ]"
-        (simpleBinding (ChakraMap [ (ChakraString "something", numOne) ]))
+        (simpleBinding (ChakraMap [ (ChakraString "something", litExpr numOne) ]))
 
     let complexBindingEx =
         """
@@ -546,11 +546,64 @@ let bindingTests () =
 
     test "complex binding" chakraBinding complexBindingEx
         (complexBinding "complex"
-             [ (ChakraBinding(ChakraSimpleBindingPattern "other", ChakraExprList([], numOne)))
+             [ (ChakraBinding(ChakraSimpleBindingPattern "other", ChakraExprList([], litExpr numOne)))
                simpleBinding (ChakraIdent "other") ]
              (ChakraList
-                 [ (ChakraIdent "other")
-                   (ChakraIdent "something") ]))
+                 [ (litExpr (ChakraIdent "other"))
+                   (litExpr (ChakraIdent "something")) ]))
+
+    printfn ""
+
+
+let moduleTests () =
+    printfn "Binding Tests"
+    printfn "-------------\n"
+
+    let moduleEx =
+        """
+something = other
+
+something = 1
+
+something = "else"
+
+something = #one
+
+something = ( #one #two )
+
+something = [ 1 2 ]
+        
+something = { 1 2 }
+
+something = ( something = 1 )
+
+something = [ "something" = 1 ]
+
+complex =
+    other = 1
+    something = other
+    [ other something ]
+        """.Trim [| '\n'; '\t'; ' ' |]
+
+    let expected = ChakraModule [
+        (simpleBinding (ChakraIdent "other"))
+        (simpleBinding numOne)
+        (simpleBinding strElse)
+        (simpleBinding symOne)
+        (simpleBinding (ChakraTuple [ litExpr symOne; litExpr symTwo ]))
+        (simpleBinding (ChakraList [ litExpr numOne; litExpr numTwo ]))
+        (simpleBinding (ChakraVector [ litExpr numOne; litExpr numTwo ]))
+        (simpleBinding (ChakraStruct [ ("something", litExpr numOne) ]))
+        (simpleBinding (ChakraMap [ (ChakraString "something", litExpr numOne) ]))
+        (complexBinding "complex"
+             [ (ChakraBinding(ChakraSimpleBindingPattern "other", ChakraExprList([], litExpr numOne)))
+               simpleBinding (ChakraIdent "other") ]
+             (ChakraList
+                 [ (litExpr (ChakraIdent "other"))
+                   (litExpr (ChakraIdent "something")) ]))
+    ]
+
+    test "module parses" chakraModule moduleEx expected
 
     printfn ""
 
@@ -568,8 +621,6 @@ let runTests () =
     structTests ()
     mapTests ()
     bindingTests ()
+    moduleTests ()
     printfn "Done."
 
-
-
-runTests ()
