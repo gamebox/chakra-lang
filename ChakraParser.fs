@@ -58,7 +58,7 @@ let chakraExprList, chakraExprListRef =
 (* Basic punctuation *)
 
 
-let leftParen = pchar '(' .>> whitespace
+let leftParen = pchar '(' .>> whitespace <?> "left parenthesis"
 let rightParen = whitespace >>. pchar ')'
 let leftBracket = pchar '[' .>> whitespace
 let rightBracket = whitespace >>. pchar ']'
