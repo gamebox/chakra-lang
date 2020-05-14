@@ -6,22 +6,28 @@ open ParserLibrary
 
 (* Types *)
 
+type FunctionBindPatternInfo = {
+    Name: string
+    Args: string list
+}
 
-type ChakraBindingPattern = ChakraSimpleBindingPattern of string
-// | ChakraFunctionBindingPattern of (string * string list)
+type ChakraIdentifier = ChakraIdentifier of string
+
+type ChakraBindingPattern =
+    | ChakraSimpleBindingPattern of string
+    | ChakraFunctionBindingPattern of FunctionBindPatternInfo
 // | ChakraComplexBindingPattern of ChakraPattern
 type ChakraLiteral =
-    | ChakraIdent of string
+    | ChakraVar of string
     | ChakraNumber of float
     | ChakraSymbol of string
     | ChakraString of string
-    | ChakraIgnore
-    | ChakraRest
     | ChakraTuple of ChakraExpr list
     | ChakraStruct of (string * ChakraExpr) list
     | ChakraList of ChakraExpr list
     | ChakraMap of (ChakraLiteral * ChakraExpr) list
     | ChakraVector of ChakraExpr list
+    | ChakraLambda of (ChakraExpr list * ChakraExprList)
 
 and ChakraMatch = ChakraMatch of (ChakraLiteral * ChakraMatchClause list)
 
@@ -59,25 +65,25 @@ let chakraExprList, chakraExprListRef =
 
 
 let leftParen = pchar '(' .>> whitespace <?> "left parenthesis"
-let rightParen = whitespace >>. pchar ')'
-let leftBracket = pchar '[' .>> whitespace
-let rightBracket = whitespace >>. pchar ']'
-let leftCurly = pchar '{' .>> whitespace
-let rightCurly = whitespace >>. pchar '}'
-let matchOperator = whitespace >>. pchar '?' .>> whitespace
-let patternSep = pchar '|' .>> whitespace
+let rightParen = whitespace >>. pchar ')' <?> "right parenthesis"
+let leftBracket = pchar '[' .>> whitespace <?> "left bracket"
+let rightBracket = whitespace >>. pchar ']' <?> "right bracket"
+let leftCurly = pchar '{' .>> whitespace <?> "left curly brace"
+let rightCurly = whitespace >>. pchar '}' <?> "right curly brace"
+let matchOperator = whitespace1 >>. pchar '?' .>> whitespace1 <?> "match operator"
+let patternSep = pchar '|' .>> whitespace1 <?> "pattern separator"
 
 let patternArrow =
-    whitespace >>. pstring "->" .>> whitespace
+    whitespace1 >>. pstring "->" .>> whitespace1 <?> "pattern arrow"
 
-let equal = whitespace >>. pchar '=' .>> whitespace
-let pipe = pchar '|' .>>. whitespace
+let equal = whitespace1 >>. pchar '=' .>> whitespace1 <?> "bind operator"
+let pipe = pchar '|' .>>. whitespace1 <?> "pattern separator"
 
 let arrow =
-    whitespace .>>. pstring "->" .>> whitespace
+    whitespace1 .>>. pstring "->" .>> whitespace1 <?> "pattern arrow"
 
 let questionMark =
-    whitespace .>>. pchar '?' .>>. whitespace
+    whitespace1 .>>. pchar '?' .>>. whitespace1 <?> "match separator"
 
 
 
@@ -115,9 +121,9 @@ let pBaseIdentifier =
     |>> convertToIdentifier
     <?> "identifier /([A-Za-z]+[a-z]*)(\-{1,2}[A-Za-z]+[a-z]*)*[?!\*]{0,1}/"
 
-let chakraIndent =
+let chakraVar =
     pBaseIdentifier
-    |>> ChakraIdent
+    |>> ChakraVar
     <?> "valid identifier"
 
 let chakraSymbol =
@@ -226,12 +232,15 @@ let chakraString =
     <?> "string"
 
 let chakraIgnore =
-    pchar '_' |>> (fun _ -> ChakraIgnore) <?> "ignore"
+    pchar '_' <?> "ignore"
 
-let chakraRest = pstring "..." >>% ChakraRest <?> "rest"
+let chakraRest = pstring "..." <?> "rest"
+
+let rawTuple = 
+    between leftParen (sepBy chakraExpr whitespace) rightParen
 
 let chakraTuple =
-    between leftParen (sepBy chakraExpr whitespace) rightParen
+    rawTuple
     |>> ChakraTuple
     <?> "tuple"
 
@@ -262,13 +271,17 @@ let chakraVector =
     |>> ChakraVector
     <?> "vector"
 
+let chakraLambda =
+    between leftCurly (rawTuple .>> arrow .>>. chakraExprList) rightCurly
+    |>> ChakraLambda
+
 
 (* Expressions *)
 
 
 let chakraApply =
     ((pBaseIdentifier |>> string) .>> leftParen)
-    .>>. many chakraExpr
+    .>>. sepBy chakraExpr whitespace
     .>> rightParen
     |>> ChakraApply
     <?> "apply"
@@ -295,36 +308,38 @@ let rec chakraBinding =
     .>>. chakraExprList
     |>> ChakraBinding
 
-let chakraLiteralExpr = chakraLiteral |>> ChakraLiteralExpr
-let chakraApplyExpr = chakraApply |>> ChakraApplyExpr
-let chakraMatchExpr = chakraMatch |>> ChakraMatchExpr
+let chakraLiteralExpr = chakraLiteral |>> ChakraLiteralExpr <?> "literal expression"
+let chakraApplyExpr = chakraApply |>> ChakraApplyExpr <?> "function application"
+let chakraMatchExpr = chakraMatch |>> ChakraMatchExpr <?> "match expression"
 
 
 let chakraModule =
     many1 chakraBinding
     |>> ChakraModule
+    <?> "module"
 
 (* Set refs *)
 
 
 chakraLiteralRef
 := choice
-    [ chakraIndent
+    [ chakraVar
       chakraNumber
       chakraString
-      chakraIgnore
       chakraSymbol
-      chakraRest
       chakraTuple
       chakraList
       chakraVector
       chakraStruct
-      chakraMap ]
+      chakraMap
+      chakraLambda ]
+    <?> "literal"
 
 chakraExprRef
-:= chakraLiteralExpr
-<|> chakraApplyExpr
+:= chakraApplyExpr
 <|> chakraMatchExpr
+<|> chakraLiteralExpr
+<?> "expression"
 
 chakraExprListRef
 := many chakraBinding
@@ -332,6 +347,7 @@ chakraExprListRef
 .>>. chakraExpr
 .>> whitespace
 |>> ChakraExprList
+<?> "expression list"
 
 
 
@@ -342,7 +358,7 @@ chakraExprListRef
 *******************************************************************************)
 
 let something = (ChakraSimpleBindingPattern "something")
-let identSomething = (ChakraIdent "something")
+let identSomething = (ChakraVar "something")
 let strSomething = (ChakraString "something")
 let strElse = (ChakraString "else")
 let symOne = (ChakraSymbol "one")
@@ -353,25 +369,28 @@ let numTwo = (ChakraNumber 2.0)
 let num200 = (ChakraNumber 200.0)
 let litExpr literal = (ChakraLiteralExpr literal)
 
+let simpleExprList literal = 
+    ChakraExprList ([], litExpr literal)
+
 let simpleBinding literal =
-    (ChakraBinding(something, ChakraExprList([], litExpr literal)))
+    (ChakraBinding(something, simpleExprList literal))
 
 let complexBinding name bindings literal =
     (ChakraBinding(ChakraSimpleBindingPattern name, ChakraExprList(bindings, litExpr literal)))
 
-let identifierTests () =
+let varTests () =
     printfn "Identifier tests"
     printfn "------------\n"
-    test "one segment identifier with first upper" chakraIndent "Something" (ChakraIdent "Something")
-    test "one segment identifier with first lower" chakraIndent "something" (ChakraIdent "something")
-    test "multiple segments" chakraIndent "something-else" (ChakraIdent "something-else")
-    test "multiple segments" chakraIndent "Something-else" (ChakraIdent "Something-else")
-    test "multiple segments" chakraIndent "something-Else" (ChakraIdent "something-Else")
-    test "multiple segments with bang" chakraIndent "something-else!" (ChakraIdent "something-else!")
-    test "multiple segments with question mark" chakraIndent "something-else?" (ChakraIdent "something-else?")
-    test "multiple segments with star" chakraIndent "something-else*" (ChakraIdent "something-else*")
+    test "one segment identifier with first upper" chakraVar "Something" (ChakraVar "Something")
+    test "one segment identifier with first lower" chakraVar "something" (ChakraVar "something")
+    test "multiple segments" chakraVar "something-else" (ChakraVar "something-else")
+    test "multiple segments" chakraVar "Something-else" (ChakraVar "Something-else")
+    test "multiple segments" chakraVar "something-Else" (ChakraVar "something-Else")
+    test "multiple segments with bang" chakraVar "something-else!" (ChakraVar "something-else!")
+    test "multiple segments with question mark" chakraVar "something-else?" (ChakraVar "something-else?")
+    test "multiple segments with star" chakraVar "something-else*" (ChakraVar "something-else*")
 
-    testError chakraIndent "starting with number should fail" "1something"
+    testError chakraVar "starting with number should fail" "1something"
 
     printfn ""
 
@@ -412,19 +431,6 @@ let symbolTests () =
 
     printfn ""
 
-let ignoreTests () =
-    printfn "Ignore tests"
-    printfn "------------\n"
-    test "ignore" chakraIgnore "_" ChakraIgnore
-
-    printfn ""
-
-let restTests () =
-    printfn "Rest tests"
-    printfn "------------\n"
-    test "rest" chakraRest "..." ChakraRest
-
-    printfn ""
 
 
 let tupleTests () =
@@ -445,16 +451,6 @@ let tupleTests () =
 
     test "mixed tuple with symbol and number with whitespace" chakraTuple "( #ok 200 )"
         (ChakraTuple [ (litExpr symOk); (litExpr num200) ])
-
-    test "mixed tuple with symbol and ignore" chakraTuple "(#ok _)"
-        (ChakraTuple
-            [ (litExpr symOk)
-              (litExpr ChakraIgnore) ])
-
-    test "mixed tuple with symbol and rest" chakraTuple "(#ok ...)"
-        (ChakraTuple
-            [ (litExpr symOk)
-              (litExpr ChakraRest) ])
 
     printfn ""
 
@@ -520,11 +516,19 @@ let mapTests () =
 
     printfn ""
 
+let lambdaTests () =
+    printfn "Lambda Tests"
+    printfn "------------\n"
+
+    test "zero arg simple lambda" chakraLambda "{ () -> 1 }" (ChakraLambda ([], simpleExprList numOne))
+
+    printfn ""
+
 let bindingTests () =
     printfn "Binding Tests"
     printfn "-------------\n"
 
-    test "binding to identifier" chakraBinding "something = other" (simpleBinding (ChakraIdent "other"))
+    test "binding to identifier" chakraBinding "something = other" (simpleBinding (ChakraVar "other"))
     test "binding to number" chakraBinding "something = 1" (simpleBinding numOne)
     test "binding to string" chakraBinding "something = \"else\"" (simpleBinding strElse)
     test "binding to symbol" chakraBinding "something = #one" (simpleBinding symOne)
@@ -547,13 +551,21 @@ let bindingTests () =
     test "complex binding" chakraBinding complexBindingEx
         (complexBinding "complex"
              [ (ChakraBinding(ChakraSimpleBindingPattern "other", ChakraExprList([], litExpr numOne)))
-               simpleBinding (ChakraIdent "other") ]
+               simpleBinding (ChakraVar "other") ]
              (ChakraList
-                 [ (litExpr (ChakraIdent "other"))
-                   (litExpr (ChakraIdent "something")) ]))
+                 [ (litExpr (ChakraVar "other"))
+                   (litExpr (ChakraVar "something")) ]))
 
     printfn ""
 
+let applyTests () =
+    printfn "Apply Tests"
+    printfn "-----------\n"
+
+    test "Should parse a 1 arity apply" chakraApply "some-func(1)" (ChakraApply ("some-func", [ChakraLiteralExpr numOne]))
+    test "Should parse a 2 arity apply" chakraApply "some-func(1 1)" (ChakraApply ("some-func", [ChakraLiteralExpr numOne; ChakraLiteralExpr numOne]))
+
+    printfn ""
 
 let moduleTests () =
     printfn "Binding Tests"
@@ -586,7 +598,7 @@ complex =
         """.Trim [| '\n'; '\t'; ' ' |]
 
     let expected = ChakraModule [
-        (simpleBinding (ChakraIdent "other"))
+        (simpleBinding (ChakraVar "other"))
         (simpleBinding numOne)
         (simpleBinding strElse)
         (simpleBinding symOne)
@@ -597,10 +609,10 @@ complex =
         (simpleBinding (ChakraMap [ (ChakraString "something", litExpr numOne) ]))
         (complexBinding "complex"
              [ (ChakraBinding(ChakraSimpleBindingPattern "other", ChakraExprList([], litExpr numOne)))
-               simpleBinding (ChakraIdent "other") ]
+               simpleBinding (ChakraVar "other") ]
              (ChakraList
-                 [ (litExpr (ChakraIdent "other"))
-                   (litExpr (ChakraIdent "something")) ]))
+                 [ (litExpr (ChakraVar "other"))
+                   (litExpr (ChakraVar "something")) ]))
     ]
 
     test "module parses" chakraModule moduleEx expected
@@ -609,12 +621,10 @@ complex =
 
 let runTests () =
     printfn "Running all tests..."
-    identifierTests ()
+    varTests ()
     numberTests ()
     stringTests ()
     symbolTests ()
-    ignoreTests ()
-    restTests ()
     tupleTests ()
     listTests ()
     vectorTests ()

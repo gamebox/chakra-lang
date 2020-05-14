@@ -357,6 +357,7 @@ let pstring str =
 
 let whitespaceChar = satisfy Char.IsWhiteSpace "whitespace"
 let whitespace = many whitespaceChar
+let whitespace1 = many1 whitespaceChar
 
 let digit =
     let predicate = Char.IsDigit

@@ -17,6 +17,17 @@ type Type =
     | FunctionType of ((Type list) * Type)
     | UnknownType
 
+type Env = Collections.Map<string, Type>
+
+let createEnv () =
+    new Map<string, Type> ([])
+
+let getTypeForBinding string (env:Env) =
+    Map.tryFind string env
+
+let addBinding string typ (env:Env) =
+    Map.add string typ env
+
 let rec print typ =
     match typ with
     | UnionType types ->
@@ -63,7 +74,7 @@ let rec print typ =
         sprintf "( %s )"
             (fields
             |> List.map (fun (name, typ) ->
-                sprintf "%s = %s" name (print typ))
+                sprintf ".%s = %s" name (print typ))
             |> String.concat " ")
 
     | FunctionType (args, retrn) ->
@@ -72,7 +83,7 @@ let rec print typ =
                 (args
                 |> List.map print
                 |> String.concat " ")
-        sprintf "{ %s -> %s}"
+        sprintf "{ %s -> %s }"
             argList
             (print retrn)
 
@@ -90,47 +101,53 @@ let typeListToType types =
     else
         UnionType (List.sort types)
 
-let rec exprType expr =
+let rec exprType (env:Env) expr =
     match expr with
-    | ChakraLiteralExpr literal->
-        literalType literal
-    | _ -> UnknownType
-
-
-and reduceExprs exprs =
-    exprs
-        |> List.map exprType
+    | ChakraLiteralExpr literal ->
+        literalType env literal
+    | ChakraApplyExpr (ChakraApply (ident, exprs)) ->
+        let exprsTypes =
+            exprs
+            |> List.map (exprType env)
+        
+        FunctionType (exprsTypes, UnknownType)
+    | ChakraMatchExpr (ChakraMatch (matchingPattern, clauses)) ->
+        clauses
+        |> List.map (fun (ChakraMatchClause (pattern, exprList)) ->
+            exprListType env exprList)
         |> List.fold gatherTypes []
         |> typeListToType
 
-and literalType literal =
+
+and reduceExprs env exprs =
+    exprs
+        |> List.map (exprType env)
+        |> List.fold gatherTypes []
+        |> typeListToType
+
+and literalType env literal =
     match literal with
         | ChakraNumber _ -> NumberType
         | ChakraSymbol _ -> SymbolType
         | ChakraString _ -> StringType
-        | ChakraTuple items -> TupleType (List.map (fun item -> 
-            match item with
-            | ChakraLiteralExpr literal ->
-                literalType literal
-            | _ -> UnknownType) items)
-
+        | ChakraTuple items -> TupleType (List.map  (exprType env) items)
         | ChakraStruct fields ->
             fields
             |> List.map (fun (label, expr) ->
-                (label, exprType expr))
+                (label, exprType env expr))
             |> StructType
 
         | ChakraList items ->
             items
-            |> reduceExprs
+            |> reduceExprs env
             |> ListType
 
         | ChakraMap entries ->
             let (keyTypes, valueTypes) = 
                 entries
                 |> List.fold (fun (keys, values) (key, value) ->
-                    let keyType = literalType key
-                    let valueType = exprType value
+                    let keyType = literalType env key
+                    let valueType = exprType env value
                     (keyType::keys, valueType::values))
                     ([], [])
             
@@ -146,16 +163,32 @@ and literalType literal =
 
         | ChakraVector items ->
             items
-            |> reduceExprs
+            |> reduceExprs env
             |> VectorType
             
-        | _ -> UnknownType
+        | ChakraVar name ->
+             match getTypeForBinding name env with
+             | Some t -> t
+             | _ -> UnknownType
 
-and exprListType (ChakraBinding (list, ChakraExprList (bindings, expr))) =
-    match expr with
-    | ChakraLiteralExpr literal ->
-        literalType literal
-    | _ -> UnknownType
+        | ChakraLambda (args, body) ->
+            let argTypes = List.map (fun _ -> UnknownType) args
+
+            FunctionType (argTypes, (exprListType env body))
+
+and exprListType env (ChakraExprList (bindings, expr)) =
+    let reduceBindings = fun env1 (ChakraBinding (pattern, exprList)) -> 
+        match pattern with
+        | ChakraSimpleBindingPattern name ->
+            addBinding name (exprListType env1 exprList) env1
+        | _ -> env1
+
+    bindings
+    |> List.fold reduceBindings env
+    |> (fun env1 -> exprType env1 expr)
+
+and bindingType (env:Env) (ChakraBinding (pattern, exprList)) =
+    exprListType env exprList
 
 
 (**************************************************************************************************
@@ -170,7 +203,7 @@ let literalTypeTests () =
         |> (fun (result) ->
             match result with
             | ParserLibrary.Success (literal, _) ->
-                let resultType = literalType literal
+                let resultType = literalType (createEnv ()) literal
                 if resultType = typ then 
                     printfn "%s : %s" input (print resultType)
                 else
@@ -186,7 +219,14 @@ let literalTypeTests () =
         ("A simple tuple", "( 1 2 )", TupleType [NumberType; NumberType])
         ("A simple list", "[ 1 2 3 ]", ListType NumberType)
         ("A complex list", "[ 1 #two \"three\" ]", ListType (UnionType [StringType; NumberType; SymbolType]))
+        ("A simple vector", "{ 1 2 3 }", VectorType NumberType)
+        ("A complex list", "{ 1 #two \"three\" }", VectorType (UnionType [StringType; NumberType; SymbolType]))
         ("A simple struct", "( something = 1 else = #two )", StructType [("something", NumberType); ("else", SymbolType)])
-
+        ("A simple map", """[ "something" = 1 "else" = 2 ]""", MapType (StringType, NumberType))
+        (
+            "A list of structs",
+            "[ ( something = 1 else = #two ) ( something = 1 else = #two ) ( something = 1 else = #two ) ]",
+            ListType (StructType [("something", NumberType); ("else", SymbolType)])
+        )
     ]
     |> List.map literalTypeTest
