@@ -1,5 +1,7 @@
 module Repl
 
+let (<?>) = ParserLibrary.setLabel
+
 type ReplInput =
     | ReplBinding of ChakraParser.ChakraBinding
     | ReplExpr of ChakraParser.ChakraExpr
@@ -16,18 +18,20 @@ let replParser: ParserLibrary.Parser<ReplInput> =
 
     let replBinding: ParserLibrary.Parser<ReplInput> =
         ParserLibrary.mapP ReplBinding ChakraParser.chakraBinding
+        <?> "replBinding"
 
     let replExpr: ParserLibrary.Parser<ReplInput> =
         ParserLibrary.mapP ReplExpr ChakraParser.chakraExpr
+        <?> "replExpr"
 
     replBinding <|> replExpr
 
 
-let handleInput types bindings input =
+let handleInput types bindings (input: string) =
     match ParserLibrary.run replParser input with
     | ParserLibrary.Success (parsedInput, remaining) when ParserLibrary.atEndOfInput remaining ->
         match parsedInput with
-        | ReplBinding (ChakraParser.ChakraBinding (name, exprList)) ->
+        | ReplBinding (ChakraParser.ChakraBinding (pos, name, exprList)) ->
             let typ = Unify.exprListType types exprList
 
             let name' =
@@ -40,7 +44,7 @@ let handleInput types bindings input =
             ParseSuccess
                 (typDisplay,
                  Unify.addBinding name' typ types,
-                 Map.add name' (ChakraParser.ChakraBinding(name, exprList)) bindings)
+                 Map.add name' (ChakraParser.ChakraBinding(pos, name, exprList)) bindings)
 
         | ReplExpr expr ->
             let typ = Unify.exprType types expr

@@ -1,0 +1,61 @@
+#+TITLE: chakra-actors
+#+HTML_HEAD: <link rel="stylesheet" href="https://unpkg.com/purecss@1.0.0/build/pure-min.css" integrity="sha384-nn4HPE8lTHyVtfCBi5yW9d20FjT8BJwUXyWZT9InLYax14RDjBj46LmSztkmNP9w" crossorigin="anonymous">
+#+HTML_HEAD_EXTRA: <style>body { margin: 32px auto; max-width: 60em; }</style>
+#+OPTIONS: num:nil
+#+OPTIONS: todo:nil
+#+SETUPFILE: https://fniessen.github.io/org-html-themes/setup/theme-readtheorg.setup
+
+* Actors in Chakra
+
+Actors are the foundation of Chakra. A Chakra application is composed of tens, hundreds, thousands, even
+hundreds of thousands of Actors.  But what are they?  They come from the "Actor Model" as proposed by Carl
+Hewitt in an influential paper from 1973 and developed even more over the past 40 years.  Here's a
+definition of Actors from a 2010 paper:
+
+#+BEGIN_QUOTE
+An Actor is a computational entity that, in response to a message it receives, can concurrently:
+ send a finite number of messages to other Actors;
+ create a finite number of new Actors;
+ designate the behavior to be used for the next message it receives
+#+END_QUOTE
+
+So, fundamentally, an Actor is a computational entity.  The root of your Chakra application will be an actor,
+which is why ~main.chakra~ must export an Actor.
+
+** Actors as units of concurrent computation
+
+In their simplest form, an Actor is an entity that continuously:
+
+1. Receive a message
+2. Do some calculation based on it
+3. Finally, possibly update some internal state, create new actors, or send messages to other,
+existing actors.
+
+And then repeat.  When an Actor has no messages to process, it does nothing.  It may have some state that
+is maintained everytime it receives a message.  The behavior of an Actor when it receives a message can
+vary depending on the Actor's current state.
+
+But to be a unit of /concurrent/ computation requires some particular properties of all of these facts.
+
+- It should only handle a single message at a time
+- It's state MUST be completely encapsulated, and only accessible through message passing
+- All messaging must be asynchronous
+- It must never block execution
+- Updates to state should never affect other actors /at a distance/, or no mutable references
+can be passed
+
+** Actors as reducers over a stream of messages
+
+The properties listed above point to an interesting pattern.  An Actor takes some initial state,
+and a (maybe infinite) stream of messages, and for each message computes a new state and
+optionally a stream of messages to other actors.  They can be reasoned as a reducer over that stream.
+
+This is only truly possible when state is only updated at the end of the processing of a message. If
+state could change during the calculation, it would be hard to reason about it's mechanics.
+
+** Actors as Finite State Machines
+
+
+
+** Actors as loosely coupled components of an information system
+

@@ -6,8 +6,8 @@
   <ItemGroup>
     <Compile Include="ParserLibrary.fs" />
     <Compile Include="ChakraParser.fs" />
-    <Compile Include="Command.fs" />
     <Compile Include="Unify.fs" />
+    <Compile Include="Command.fs" />
     <Compile Include="Repl.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

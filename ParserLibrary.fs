@@ -185,6 +185,15 @@ let getLabel p = p.Label
 
 let (<?>) = setLabel
 
+let withPosition parser =
+    let newInnerFn input =
+        match parser.ParseFn input with
+        | Success (value1, remainingInput) -> Success((input.Position, value1), remainingInput)
+        | Failure (label, err, pos) -> Failure(label, err, pos)
+
+    { ParseFn = newInnerFn
+      Label = parser.Label }
+
 (*
 ** Combinators
 *)
