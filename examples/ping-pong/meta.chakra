@@ -1,0 +1,27 @@
+;; This is the module that defines metadata for a package
+;; or application.  It's a Chakra file, but with fewer
+;; allowed language constructs.  Only a definition and top-
+;; level bindings bound to literals is allowed, as well as
+;; comments (doc or line)
+= (
+    name
+    authors
+    license
+    deps
+)
+
+; The name of the application
+name = "Ping Pong"
+
+; Any contributors to the application (optional)
+authors = [
+    "Anthony Raymond Bullard"
+]
+
+; A license for the application source (optional)
+license = "MIT"
+
+; A list of dependencies to be fetched and stored
+; in /packages directory before the application is
+; built.
+deps = []

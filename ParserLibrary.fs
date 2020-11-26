@@ -90,6 +90,14 @@ let nextChar input =
             let newState = { input with Position = newPos }
             newState, Some char
 
+let charAtOffset offset input = 
+    let colPos = input.Position.Column + offset
+    if colPos > 0 then
+        let line = currentLine input
+        Some line.[colPos]
+    else
+        None
+
 let rec readAllChars input =
     [ let remainingInput, charOpt = nextChar input
       match charOpt with
@@ -127,24 +135,6 @@ let runOnInput parser input = parser.ParseFn input
 
 let run parser input = runOnInput parser (fromStr input)
 
-
-let test label (p: Parser<'a>) input (expected: 'a) =
-    run p input
-    |> (fun result ->
-        match result with
-        | Success (value, input) when value = expected -> printfn "Success: %s" label
-        | _ ->
-            printfn "Test Failed: %s" label
-            printResult result)
-
-let testError (p: Parser<'a>) label input =
-    run p input
-    |> (fun result ->
-        match result with
-        | Failure (_) -> printfn "Success: %s" label
-        | _ ->
-            printfn "Test Failed: Expected a failure got a success: %s" label
-            printResult result)
 (*
 ** Utilities
 *)
@@ -255,7 +245,7 @@ let many1 p =
     >>= (fun head -> many p >>= (fun tail -> returnP (head :: tail)))
 
 let applyP fP xP =
-    fP >>= (fun f -> xP >>= (fun x -> returnP (f x)))
+    fP >>= (fun f -> xP >>= (f >> returnP))
 
 let orElse p1 p2 =
     let innerFn input =

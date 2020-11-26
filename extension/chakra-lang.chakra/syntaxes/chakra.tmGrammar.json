@@ -1,0 +1,212 @@
+{
+    "fileTypes": [
+        "chakra"
+    ],
+    "name": "chakra",
+    "patterns": [
+        {
+            "include": "#main"
+        }
+    ],
+    "scopeName": "source.chakra",
+    "uuid": "ea50a02d-f6aa-46a4-8a2a-6b64a9c7ab15;",
+    "repository": {
+        "main": {
+            "patterns": [
+                {
+                    "include": "#module_binding"
+                },
+                {
+                    "match": "(\\b([A-Za-z]+[a-z]*)(\\-{1,2}[A-Za-z]+[a-z]*)*[\\x{003f}\\x{0021}\\*]{0,1}\\b)",
+                    "name": "keyword.chakra"
+                },
+                {
+                    "include": "#numeric"
+                },
+                {
+                    "begin": "(\\{)",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "punctuation.chakra"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "#main__1"
+                        }
+                    ],
+                    "end": "(\\})",
+                    "endCaptures": {
+                        "1": {
+                            "name": "punctuation.chakra"
+                        }
+                    }
+                },
+                {
+                    "include": "#text"
+                },
+                {
+                    "include": "#symbol"
+                },
+                {
+                    "include": "#import"
+                },
+                {
+                    "begin": "(\\()",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "punctuation.chakra"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "#main__2"
+                        }
+                    ],
+                    "end": "(\\))",
+                    "endCaptures": {
+                        "1": {
+                            "name": "punctuation.chakra"
+                        }
+                    }
+                },
+                {
+                    "begin": "(\\[)",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "punctuation.chakra"
+                        }
+                    },
+                    "patterns": [
+                        {
+                            "include": "#main__3"
+                        }
+                    ],
+                    "end": "(\\])",
+                    "endCaptures": {
+                        "1": {
+                            "name": "punctuation.chakra"
+                        }
+                    }
+                },
+                {
+                    "match": "(\\=|\\?|\\||->)",
+                    "name": "punctuation.chakra"
+                },
+                {
+                    "match": "(\\\/)",
+                    "name": "punctuation.chakra"
+                },
+                {
+                    "match": "(\\.)",
+                    "name": "punctuation.chakra"
+                },
+                {
+                    "match": "(;.*)",
+                    "name": "comment.chakra"
+                },
+                {
+                    "match": "([^\\s])",
+                    "name": "invalid.chakra"
+                }
+            ]
+        },
+        "import": {
+            "patterns": [
+                {
+                    "match": "(\\\/.*)",
+                    "name": "import.chakra"
+                }
+            ]
+        },
+        "main__1": {
+            "patterns": [
+                {
+                    "include": "#main"
+                }
+            ]
+        },
+        "main__2": {
+            "patterns": [
+                {
+                    "include": "#main"
+                },
+                {
+                    "match": "(,)",
+                    "name": "punctuation.chakra"
+                }
+            ]
+        },
+        "main__3": {
+            "patterns": [
+                {
+                    "include": "#main"
+                },
+                {
+                    "match": "(,)",
+                    "name": "punctuation.chakra"
+                }
+            ]
+        },
+        "module_binding": {
+            "patterns": [
+                {
+                    "match": "(^(\\b([A-Za-z]+[a-z]*)(\\-{1,2}[A-Za-z]+[a-z]*)*[\\x{003f}\\x{0021}\\*]{0,1}\\b))",
+                    "name": "entity.name.function.chakra"
+                }
+            ]
+        },
+        "numeric": {
+            "patterns": [
+                {
+                    "match": "(\\b\\d+)",
+                    "name": "constant.numeric.chakra"
+                }
+            ]
+        },
+        "symbol": {
+            "patterns": [
+                {
+                    "match": "(#(\\b([A-Za-z]+[a-z]*)(\\-{1,2}[A-Za-z]+[a-z]*)*[\\x{003f}\\x{0021}\\*]{0,1}\\b))",
+                    "name": "constant.language.chakra"
+                }
+            ]
+        },
+        "text": {
+            "patterns": [
+                {
+                    "begin": "(\\\")",
+                    "beginCaptures": {
+                        "1": {
+                            "name": "string.chakra"
+                        }
+                    },
+                    "contentName": "string.chakra",
+                    "end": "(\\\")",
+                    "endCaptures": {
+                        "1": {
+                            "name": "string.chakra"
+                        }
+                    }
+                }
+            ]
+        },
+        "text__1": {
+            "patterns": []
+        },
+        "tuple__1": {
+            "patterns": [
+                {
+                    "include": "#numeric"
+                },
+                {
+                    "include": "#text"
+                },
+                {
+                    "match": "(,)",
+                    "name": "punctuation.chakra"
+                }
+            ]
+        }
+    }
+}

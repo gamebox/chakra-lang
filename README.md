@@ -93,6 +93,12 @@ each component of computation needed. With causal message passing semantics, and
 memory model, the runtime can move between hundreds of thousands of Actors very efficiently. And
 the author of the program need not worry about Mutexes, Locks, or Semaphores.
 
+```chakra
+x =
+    ; The below is a tuple
+    ( "Tuple" 3.14 )
+```
+
 <a id="org9610a45"></a>
 
 ### Create doc about Actors in Chakra and link here

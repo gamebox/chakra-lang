@@ -18,12 +18,8 @@ let fromArgs argv =
         Ok Help
     | [| "version" |] ->
         Ok Version
-    | [| str |]
-    | [| str; _ |]
-    | [| str; _; _ |]
-    | [| str; _; _; _ |]
-    | [| str; _; _; _; _ |] ->
-        Error (sprintf "Unknown command: %s" str)
-    | _ ->
-        Error "Please specify a known command."
+    | [||] ->
+        Ok Help
+    | str ->
+        Error (sprintf "Unknown command: %s" (str.[0]))
     

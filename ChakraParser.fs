@@ -10,6 +10,8 @@ type FunctionBindPatternInfo = { Name: string; Args: string list }
 
 type ChakraIdentifier = ChakraIdentifier of string
 
+type ChakraComment = { IsDoc: bool ; Content: string }
+
 type ChakraBindingPattern =
     | ChakraSimpleBindingPattern of string
     | ChakraFunctionBindingPattern of FunctionBindPatternInfo
@@ -24,7 +26,9 @@ type ChakraLiteral =
     | ChakraList of ChakraExpr list
     | ChakraMap of (ChakraLiteral * ChakraExpr) list
     | ChakraVector of ChakraExpr list
-    | ChakraLambda of (ChakraExpr list * ChakraExprList)
+    | ChakraLambda of ChakraLambda
+
+and ChakraLambda = { Args: string list; Body: ChakraExprList }
 
 and ChakraMatch = ChakraMatch of (ChakraLiteral * ChakraMatchClause list)
 
@@ -38,11 +42,14 @@ and ChakraExpr =
     | ChakraLiteralExpr of (Position * ChakraLiteral)
     | ChakraMatchExpr of (Position * ChakraMatch)
     | ChakraApplyExpr of (Position * ChakraApply)
+    // This expr type is for builtins.  The string is an identifier for the builtin.
+    // It is illegal for these to be referenced in userland code.
+    | ChakraNativeExpr of (string)
 
 and ChakraApply = ChakraApply of (string * ChakraExpr list)
 
 
-type ChakraModule = ChakraModule of ChakraBinding list
+type ChakraModule = { DocComments: string option ; Exports: string list ; Bindings: ChakraBinding list }
 
 
 (* Create Refs *)
@@ -94,6 +101,8 @@ let patternArrow =
     .>> whitespace1
     <?> "pattern arrow"
 
+let rawEqual = pchar '=' <?> "equal sign"
+
 let equal =
     whitespace1
     >>. pchar '='
@@ -115,7 +124,9 @@ let questionMark =
     .>>. whitespace1
     <?> "match separator"
 
-
+let semi =
+    pstring ";"
+    <?> "semicolon"
 
 (* Literals *)
 
@@ -126,7 +137,6 @@ let pBaseIdentifier =
     let dash = pchar '-'
     let segment = upperOrLowerAlpha .>>. many lowerAlpha
     let questionOrBangOrStar = anyOf [ '?'; '!'; '*' ]
-    (* ((firstAlpha * restOfFirstSegment) * otherSegments * sign *)
 
     let convertToIdentifier (((firstAlpha, restOfFirstSegment), otherSegments), maybeSign) =
         let firstSegment =
@@ -214,7 +224,7 @@ let chakraNumber =
     |>> convertToNumber
     <?> "number"
 
-let chakraString =
+let validChars =
     let unescapedChar =
         let label = "char"
 
@@ -253,9 +263,9 @@ let chakraString =
         .>>. hexdigit
         |>> convertToChar
 
-    let validChars =
-        unescapedChar <|> escapedChar <|> unicodeChar
+    unescapedChar <|> escapedChar <|> unicodeChar
 
+let chakraString =
     between pdoublequote (many validChars) pdoublequote
     |>> charListToStr
     |>> ChakraString
@@ -304,9 +314,12 @@ let chakraVector =
     <?> "vector"
 
 let chakraLambda =
-    between leftCurly (rawTuple .>> arrow .>>. chakraExprList) rightCurly
+    let stringTuple =
+        between leftParen (sepBy pBaseIdentifier whitespace) rightParen
+    let createRecord (args, body) = { Args = args; Body = body }
+    between leftCurly (stringTuple .>> arrow .>>. chakraExprList) rightCurly
+    |>> createRecord
     |>> ChakraLambda
-
 
 (* Expressions *)
 
@@ -330,6 +343,7 @@ let chakraMatchClause =
 
 let chakraMatch =
     (chakraLiteral .>> questionMark)
+    .>> whitespace
     .>>. many1 chakraMatchClause
     |>> ChakraMatch
 
@@ -362,12 +376,83 @@ let chakraMatchExpr =
     |>> ChakraMatchExpr
     <?> "match expression"
 
+(* Comments *)
+
+let notNewline =
+    satisfy (fun c -> c <> '\n') "not a newline"
+(*
+    A line comment looks like this:
+
+    ```chakra
+    x = 1 ; This is a comment
+    ```
+
+    It starts with a semicolon followed by a space, and
+    continues to the end of the line
+*)
+let lineComment =
+    semi
+    >>. many notNewline
+    .>> pchar '\n'
+    |>> charListToStr
+    |>> fun content -> { IsDoc = false ; Content = content }
+    <?> "Line comment"
+
+(*
+    A doc comment looks like this:
+
+    ```chakra
+    ;; This is a doc comment
+    ;;
+    ;; It will appear in generated documentation for this module,
+    ;; as well as in intellisense documentation.
+    x = 1
+    ```
+
+    Any number of such lines may appear in sequence at the top of a module, or
+    above any top level binding
+*)
+let docComment =
+    let docCommentLine =
+        (semi .>>. semi)
+        >>. many notNewline
+        .>> pchar '\n'
+        |>> charListToStr
+
+    many1 docCommentLine
+    |>> fun lines -> { IsDoc = false ; Content = String.concat "\n" lines }
+    <?> "Doc comment"
+
+let newline = pchar '\n'
+
+(* Modules *)
+let chakraModuleDef =
+    let tupleLike =
+        between leftParen (sepBy pBaseIdentifier whitespace1) rightParen
+
+    rawEqual
+    .>> pchar ' '
+    >>. tupleLike
+    .>> many1 newline
+    <?> "Module export definition"
 
 let chakraModule =
-    many1 chakraBinding |>> ChakraModule <?> "module"
+    opt docComment
+    .>>. chakraModuleDef
+    .>>. many1 chakraBinding
+    |>> (fun ((c, exports), bindings) ->
+        let comment =
+            match c with
+            | None -> None
+            | Some ({ Content = com}) -> Some com
+        {
+            DocComments = comment
+            Exports = exports
+            Bindings = bindings
+        })
+    <?> "module"
 
 (* Set refs *)
-
 
 chakraLiteralRef
 := choice [ chakraVar
@@ -394,412 +479,3 @@ chakraExprListRef
 .>> whitespace
 |>> ChakraExprList
 <?> "expression list"
-
-
-
-(*******************************************************************************
-**
-** Tests
-**
-*******************************************************************************)
-
-let something = (ChakraSimpleBindingPattern "something")
-let identSomething = (ChakraVar "something")
-let strSomething = (ChakraString "something")
-let strElse = (ChakraString "else")
-let symOne = (ChakraSymbol "one")
-let symTwo = (ChakraSymbol "two")
-let symOk = (ChakraSymbol "ok")
-let numOne = (ChakraNumber 1.0)
-let numTwo = (ChakraNumber 2.0)
-let num200 = (ChakraNumber 200.0)
-let boi = { Line = 0; Column = 0 }
-
-let litExpr line col literal =
-    let pos = { Line = line; Column = col }
-    (ChakraLiteralExpr(pos, literal))
-
-let simpleExprList line col literal =
-    ChakraExprList([], (litExpr line col literal))
-
-let simpleBinding line col literal =
-    (ChakraBinding(boi, something, (simpleExprList line col literal)))
-
-let complexBinding name bindings line col literal =
-    (ChakraBinding(boi, ChakraSimpleBindingPattern name, ChakraExprList(bindings, (litExpr line col literal))))
-
-let varTests () =
-    printfn "Identifier tests"
-    printfn "------------\n"
-    test "one segment identifier with first upper" chakraVar "Something" (ChakraVar "Something")
-    test "one segment identifier with first lower" chakraVar "something" (ChakraVar "something")
-    test "multiple segments" chakraVar "something-else" (ChakraVar "something-else")
-    test "multiple segments" chakraVar "Something-else" (ChakraVar "Something-else")
-    test "multiple segments" chakraVar "something-Else" (ChakraVar "something-Else")
-    test "multiple segments with bang" chakraVar "something-else!" (ChakraVar "something-else!")
-    test "multiple segments with question mark" chakraVar "something-else?" (ChakraVar "something-else?")
-    test "multiple segments with star" chakraVar "something-else*" (ChakraVar "something-else*")
-
-    testError chakraVar "starting with number should fail" "1something"
-
-    printfn ""
-
-let numberTests () =
-    printfn "Number tests"
-    printfn "------------\n"
-    test "zero" chakraNumber "0" (ChakraNumber 0.0)
-    test "simple integer" chakraNumber "1" (ChakraNumber 1.0)
-    test "long integer" chakraNumber "100000005" (ChakraNumber 100000005.0)
-    test "simple decimal" chakraNumber "0.1" (ChakraNumber 0.1)
-    test "long decimal" chakraNumber "1024.2048" (ChakraNumber 1024.2048)
-
-    printfn ""
-
-let stringTests () =
-    printfn "String tests"
-    printfn "------------\n"
-
-    test "empty string" chakraString "\"\"" (ChakraString "")
-    test "simple string" chakraString "\"This is a string\"" (ChakraString "This is a string")
-    test "string with newlines" chakraString "\"One\nTwo\"" (ChakraString "One\nTwo")
-    test "string with unicode" chakraString "\"\\u00f8\"" (ChakraString "\u00f8")
-
-    printfn ""
-
-
-let symbolTests () =
-    printfn "Symbol tests"
-    printfn "------------\n"
-    test "one segment identifier with first upper" chakraSymbol "#Something" (ChakraSymbol "Something")
-    test "one segment identifier with first lower" chakraSymbol "#something" (ChakraSymbol "something")
-    test "multiple segments" chakraSymbol "#something-else" (ChakraSymbol "something-else")
-    test "multiple segments" chakraSymbol "#Something-else" (ChakraSymbol "Something-else")
-    test "multiple segments" chakraSymbol "#something-Else" (ChakraSymbol "something-Else")
-    test "multiple segments with bang" chakraSymbol "#something-else!" (ChakraSymbol "something-else!")
-    test "multiple segments with question mark" chakraSymbol "#something-else?" (ChakraSymbol "something-else?")
-    test "multiple segments with star" chakraSymbol "#something-else*" (ChakraSymbol "something-else*")
-
-    printfn ""
-
-
-
-let tupleTests () =
-    printfn "Tuple tests"
-    printfn "------------\n"
-    test "empty tuple" chakraTuple "()" (ChakraTuple [])
-    test "one element number tuple" chakraTuple "(1)" (ChakraTuple [ (litExpr 0 1 numOne) ])
-    test
-        "two element number tuple"
-        chakraTuple
-        "(1 2)"
-        (ChakraTuple [ (litExpr 0 1 numOne)
-                       (litExpr 0 3 numTwo) ])
-    test "one element symbol tuple" chakraTuple "(#one)" (ChakraTuple [ (litExpr 0 1 symOne) ])
-    test
-        "two element symbol tuple"
-        chakraTuple
-        "(#one #two)"
-        (ChakraTuple [ (litExpr 0 1 symOne)
-                       (litExpr 0 6 symTwo) ])
-    test
-        "mixed tuple with number and identifier"
-        chakraTuple
-        "(1 something)"
-        (ChakraTuple [ (litExpr 0 1 numOne)
-                       (litExpr 0 3 identSomething) ])
-
-    test
-        "mixed tuple with symbol and number"
-        chakraTuple
-        "(#ok 200)"
-        (ChakraTuple [ (litExpr 0 1 symOk)
-                       (litExpr 0 5 num200) ])
-
-    test
-        "mixed tuple with symbol and number with whitespace"
-        chakraTuple
-        "( #ok 200 )"
-        (ChakraTuple [ (litExpr 0 2 symOk)
-                       (litExpr 0 6 num200) ])
-
-    printfn ""
-
-let listTests () =
-    printfn "List tests"
-    printfn "------------\n"
-    test "empty list" chakraList "[]" (ChakraList [])
-    test "one element number list" chakraList "[1]" (ChakraList [ (litExpr 0 1 numOne) ])
-    test
-        "two element number list"
-        chakraList
-        "[1 2]"
-        (ChakraList [ (litExpr 0 1 numOne)
-                      (litExpr 0 3 numTwo) ])
-    test "one element symbol list" chakraList "[#one]" (ChakraList [ (litExpr 0 1 symOne) ])
-    test
-        "two element symbol list"
-        chakraList
-        "[#one #two]"
-        (ChakraList [ (litExpr 0 1 symOne)
-                      (litExpr 0 6 symTwo) ])
-    test "two element symbol list with whitespace" chakraList "[\n\t#one\n\t#two\n]"
-        (ChakraList [ (litExpr 1 1 symOne)
-                      (litExpr 2 1 symTwo) ])
-
-    printfn ""
-
-let vectorTests () =
-    printfn "Vector tests"
-    printfn "------------\n"
-    test "empty vector" chakraVector "{}" (ChakraVector [])
-    test "one element number vector" chakraVector "{1}" (ChakraVector [ (litExpr 0 1 numOne) ])
-    test
-        "two element number vector"
-        chakraVector
-        "{1 2}"
-        (ChakraVector [ (litExpr 0 1 numOne)
-                        (litExpr 0 3 numTwo) ])
-    test "one element symbol vector" chakraVector "{#one}" (ChakraVector [ (litExpr 0 1 symOne) ])
-    test
-        "two element symbol vector"
-        chakraVector
-        "{#one #two}"
-        (ChakraVector [ (litExpr 0 1 symOne)
-                        (litExpr 0 6 symTwo) ])
-
-    test
-        "two element tuple vector"
-        chakraVector
-        "{(#one 1) (#two 2)}"
-        (ChakraVector [ (litExpr
-                             0
-                             1
-                             (ChakraTuple [ (litExpr 0 2 symOne)
-                                            (litExpr 0 7 numOne) ]))
-                        (litExpr
-                            0
-                             10
-                             (ChakraTuple [ (litExpr 0 11 symTwo)
-                                            (litExpr 0 16 numTwo) ])) ])
-
-    test "two element tuple vector with whitespace" chakraVector "{\n\t(#one 1)\n\t(#two 2)\n}"
-        (ChakraVector [ (litExpr
-                             1
-                             1
-                             (ChakraTuple [ (litExpr 1 2 symOne)
-                                            (litExpr 1 7 numOne) ]))
-                        (litExpr
-                            2
-                             1
-                             (ChakraTuple [ (litExpr 2 2 symTwo)
-                                            (litExpr 2 7 numTwo) ])) ])
-
-    printfn ""
-
-let structTests () =
-    printfn "Struct Tests"
-    printfn "------------\n"
-
-    test "one element struct" chakraStruct "(something = 1)" (ChakraStruct [ ("something", (litExpr 0 13 numOne)) ])
-    test "one element struct with whitespace" chakraStruct "(\n\tsomething = 1\n)"
-        (ChakraStruct [ ("something", (litExpr 1 13 numOne)) ])
-    test "two element struct with whitespace" chakraStruct "(\n\tsomething = 1\n\telse = 2\n)"
-        (ChakraStruct [ ("something", (litExpr 1 13 numOne))
-                        ("else", (litExpr 2 8 numTwo)) ])
-
-    printfn ""
-
-let mapTests () =
-    printfn "Map Tests"
-    printfn "------------\n"
-
-    test
-        "one element map"
-        chakraMap
-        "[\"something\" = 1]"
-        (ChakraMap [ (ChakraString "something", (litExpr 0 15 numOne)) ])
-    test "one element map with whitespace" chakraMap "[\n\t\"something\" = 1\n]"
-        (ChakraMap [ (ChakraString "something", (litExpr 1 15 numOne)) ])
-    test "two element map with whitespace" chakraMap "[\n\t\"something\" = 1\n\t\"else\" = 2\n]"
-        (ChakraMap [ (ChakraString "something", (litExpr 1 15 numOne))
-                     (ChakraString "else", (litExpr 2 10 numTwo)) ])
-
-    printfn ""
-
-let lambdaTests () =
-    printfn "Lambda Tests"
-    printfn "------------\n"
-
-    test "zero arg simple lambda" chakraLambda "{ () -> 1 }" (ChakraLambda([], simpleExprList 0 8 numOne))
-
-    printfn ""
-
-let bindingTests () =
-    printfn "Binding Tests"
-    printfn "-------------\n"
-
-    test "binding to identifier" chakraBinding "something = other" (simpleBinding 0 12 (ChakraVar "other"))
-    test "binding to number" chakraBinding "something = 1" (simpleBinding 0 12 numOne)
-    test "binding to string" chakraBinding "something = \"else\"" (simpleBinding 0 12 strElse)
-    test "binding to symbol" chakraBinding "something = #one" (simpleBinding 0 12 symOne)
-    test
-        "binding to tuple"
-        chakraBinding
-        "something = ( #one #two )"
-        (simpleBinding
-            0
-             0
-             (ChakraTuple [ litExpr 0 0 symOne
-                            litExpr 0 0 symTwo ]))
-    test
-        "binding to list"
-        chakraBinding
-        "something = [ 1 2 ]"
-        (simpleBinding
-            0
-             0
-             (ChakraList [ litExpr 0 0 numOne
-                           litExpr 0 0 numTwo ]))
-    test
-        "binding to vector"
-        chakraBinding
-        "something = { 1 2 }"
-        (simpleBinding
-            0
-             0
-             (ChakraVector [ litExpr 0 0 numOne
-                             litExpr 0 0 numTwo ]))
-    test
-        "binding to struct"
-        chakraBinding
-        "something = ( something = 1 )"
-        (simpleBinding 0 0 (ChakraStruct [ ("something", litExpr 0 0 numOne) ]))
-    test
-        "binding to map"
-        chakraBinding
-        "something = [ \"something\" = 1 ]"
-        (simpleBinding 0 0 (ChakraMap [ (ChakraString "something", litExpr 0 0 numOne) ]))
-
-    let complexBindingEx =
-        """
-        complex =
-            other = 1
-            something = other
-            [ other something ]
-        """.Trim [| '\n'; '\t'; ' ' |]
-
-    test
-        "complex binding"
-        chakraBinding
-        complexBindingEx
-        (complexBinding
-            "complex"
-             [ (ChakraBinding(boi, ChakraSimpleBindingPattern "other", ChakraExprList([], litExpr 0 0 numOne)))
-               simpleBinding 0 0 (ChakraVar "other") ]
-             0
-             0
-             (ChakraList [ (litExpr 0 0 (ChakraVar "other"))
-                           (litExpr 0 0 (ChakraVar "something")) ]))
-
-    printfn ""
-
-let applyTests () =
-    printfn "Apply Tests"
-    printfn "-----------\n"
-
-    test
-        "Should parse a 1 arity apply"
-        chakraApply
-        "some-func(1)"
-        (ChakraApply("some-func", [ ChakraLiteralExpr(boi, numOne) ]))
-    test
-        "Should parse a 2 arity apply"
-        chakraApply
-        "some-func(1 1)"
-        (ChakraApply
-            ("some-func",
-             [ ChakraLiteralExpr(boi, numOne)
-               ChakraLiteralExpr(boi, numOne) ]))
-
-    printfn ""
-
-let moduleTests () =
-    printfn "Binding Tests"
-    printfn "-------------\n"
-
-    let moduleEx =
-        """
-something = other
-
-something = 1
-
-something = "else"
-
-something = #one
-
-something = ( #one #two )
-
-something = [ 1 2 ]
-
-something = { 1 2 }
-
-something = ( something = 1 )
-
-something = [ "something" = 1 ]
-
-complex =
-    other = 1
-    something = other
-    [ other something ]
-        """.Trim [| '\n'; '\t'; ' ' |]
-
-    let expected =
-        ChakraModule [ (simpleBinding 0 0 (ChakraVar "other"))
-                       (simpleBinding 0 0 numOne)
-                       (simpleBinding 0 0 strElse)
-                       (simpleBinding 0 0 symOne)
-                       (simpleBinding
-                           0
-                            0
-                            (ChakraTuple [ litExpr 0 0 symOne
-                                           litExpr 0 0 symTwo ]))
-                       (simpleBinding
-                           0
-                            0
-                            (ChakraList [ litExpr 0 0 numOne
-                                          litExpr 0 0 numTwo ]))
-                       (simpleBinding
-                           0
-                            0
-                            (ChakraVector [ litExpr 0 0 numOne
-                                            litExpr 0 0 numTwo ]))
-                       (simpleBinding 0 0 (ChakraStruct [ ("something", litExpr 0 0 numOne) ]))
-                       (simpleBinding 0 0 (ChakraMap [ (ChakraString "something", litExpr 0 0 numOne) ]))
-                       (complexBinding
-                           "complex"
-                            [ (ChakraBinding
-                                (boi, ChakraSimpleBindingPattern "other", ChakraExprList([], litExpr 0 0 numOne)))
-                              simpleBinding 0 0 (ChakraVar "other") ]
-                            0
-                            0
-                            (ChakraList [ (litExpr 0 0 (ChakraVar "other"))
-                                          (litExpr 0 0 (ChakraVar "something")) ])) ]
-
-    test "module parses" chakraModule moduleEx expected
-
-    printfn ""
-
-let runTests () =
-    printfn "Running all tests..."
-    varTests ()
-    numberTests ()
-    stringTests ()
-    symbolTests ()
-    tupleTests ()
-    listTests ()
-    vectorTests ()
-    structTests ()
-    mapTests ()
-    bindingTests ()
-    moduleTests ()
-    printfn "Done."

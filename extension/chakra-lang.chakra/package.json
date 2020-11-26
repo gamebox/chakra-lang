@@ -1,0 +1,41 @@
+{
+    "name": "chakra",
+    "displayName": "Chakra",
+    "description": "Syntax Highlighting for the Chakra language",
+    "version": "0.0.1",
+    "engines": {
+        "vscode": "^1.51.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
+    "publisher": "chakra-lang",
+    "contributes": {
+        "languages": [{
+            "id": "chakra",
+            "aliases": ["CHAKRA", "chakra"],
+            "extensions": [".chakra"],
+            "configuration": "./language-configuration.json"
+        }],
+        "grammars": [
+            {
+                "language": "chakra",
+                "scopeName": "source.chakra",
+                "path": "./syntaxes/chakra.tmGrammar.json",
+                "embeddedLanguages": {
+                    "meta.embedded.block.chakra": "chakra"
+                }
+            },
+            {
+                "injectTo": [
+                  "text.html.markdown"
+                ],
+                "scopeName": "markdown.chakra.codeblock",
+                "path": "./syntaxes/chakra.markdown.codeblock.json",
+                "embeddedLanguages": {
+                  "meta.embedded.block.chakra": "chakra"
+                }
+              }
+        ]
+    }
+}

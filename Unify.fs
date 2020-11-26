@@ -1,33 +1,7 @@
 module Unify
 
 open ChakraParser
-
-type Type =
-    | UnionType of Type list
-    | SumType of Type list
-    | StringType
-    | NumberType
-    | SymbolType
-    | LiteralType of ChakraLiteral
-    | TupleType of Type list
-    | ListType of Type
-    | VectorType of Type
-    | MapType of (Type * Type)
-    | StructType of (string * Type) list
-    | FunctionType of (Type list * Type)
-    | GenericType of string
-    | UnknownType
-
-let genericTypeVars =
-    List.map string ([ 'a' .. 'z' ] @ [ 'A' .. 'Z' ])
-
-type Env = Collections.Map<string, Type>
-
-let createEnv () = new Map<string, Type>([])
-
-let getTypeForBinding string (env: Env) = Map.tryFind string env
-
-let addBinding string typ (env: Env) = Map.add string typ env
+open Env
 
 let rec print typ =
     match typ with
@@ -80,9 +54,10 @@ let rec exprType (env: Env) expr =
     match expr with
     | ChakraLiteralExpr (_, literal) -> literalType env literal
     | ChakraApplyExpr (_, (ChakraApply (ident, exprs))) ->
-        let exprsTypes = exprs |> List.map (exprType env)
-
-        FunctionType(exprsTypes, UnknownType)
+        let fType = Option.defaultValue UnknownType (getTypeForBinding ident env)
+        match fType with
+        | FunctionType (_, t) -> t
+        | _ -> fType
     | ChakraMatchExpr (_, (ChakraMatch (matchingPattern, clauses))) ->
         clauses
         |> List.map (fun (ChakraMatchClause (pattern, exprList)) -> exprListType env exprList)
@@ -132,13 +107,19 @@ and literalType env literal =
         | Some t -> t
         | _ -> UnknownType
 
-    | ChakraLambda (args, body) ->
-        let argTypes =
-            args
-            |> List.indexed
-            |> List.map (fun (idx, _) -> GenericType genericTypeVars.[idx])
+    | ChakraLambda c ->
+        let foldLambda (args, e: Env) (idx, a) =
+            let argType = GenericType genericTypeVars.[idx]
+            let args' = argType :: args
+            let env' = addBinding a argType e
+            (args', env')
 
-        FunctionType(argTypes, (exprListType env body))
+        let (argTypes, newEnv) =
+            c.Args
+            |> List.indexed
+            |> List.fold foldLambda ([], env)
+
+        FunctionType(List.rev argTypes, (exprListType newEnv c.Body))
 
 and exprListType env (ChakraExprList (bindings, expr)) =
     let reduceBindings =
