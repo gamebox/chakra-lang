@@ -10,6 +10,7 @@
     <Compile Include="Unify.fs" />
     <Compile Include="Command.fs" />
     <Compile Include="Repl.fs" />
+    <Compile Include="Build.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

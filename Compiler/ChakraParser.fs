@@ -6,18 +6,22 @@ open ParserLibrary
 
 (* Types *)
 
-type FunctionBindPatternInfo = { Name: string; Args: string list }
+type FunctionBindPatternInfo = { Name: string ; Args: string list ; IsAbstract: bool }
 
 type ChakraIdentifier = ChakraIdentifier of string
 
 type ChakraComment = { IsDoc: bool ; Content: string }
 
+/// type PatternMatchInfo =
+
 type ChakraBindingPattern =
     | ChakraSimpleBindingPattern of string
     | ChakraFunctionBindingPattern of FunctionBindPatternInfo
+    | ChakraDestructuredBindingPattern of ChakraLiteral
 // | ChakraComplexBindingPattern of ChakraPattern
-type ChakraLiteral =
-    | ChakraVar of string
+
+and ChakraLiteral =
+    | ChakraVar of (string * (string list) option)
     | ChakraNumber of float
     | ChakraSymbol of string
     | ChakraString of string
@@ -46,10 +50,31 @@ and ChakraExpr =
     // It is illegal for these to be referenced in userland code.
     | ChakraNativeExpr of (string)
 
-and ChakraApply = ChakraApply of (string * ChakraExpr list)
+and ChakraApply = ChakraApply of ((string * (string list) option) * ChakraExpr list)
 
+type ChakraImportBindingType =
+    | ChakraSimpleImportBinding of string
+    | ChakraDestructuredImportBinding of Map<string, string>
 
-type ChakraModule = { DocComments: string option ; Exports: string list ; Bindings: ChakraBinding list }
+type ChakraLocalImportInfo = {
+    Library: string
+    Typ: ChakraImportBindingType
+    Relative: bool
+}
+
+type ChakraPackageImportInfo = {
+    PackageName: string
+    Typ: ChakraImportBindingType
+}
+type ChakraImport =
+    | ChakraLocalImport of ChakraLocalImportInfo
+    | ChakraPackageImport of ChakraPackageImportInfo
+
+type ChakraModule = {
+    DocComments: string option
+    Exports: string list
+    Bindings: ChakraBinding list
+    Imports: ChakraImport list }
 
 
 (* Create Refs *)
@@ -67,15 +92,22 @@ let chakraExprList, chakraExprListRef =
 
 (* Basic punctuation *)
 
+let altSigil = pchar '%'
 
 let leftParen =
     pchar '(' .>> whitespace <?> "left parenthesis"
+
+let structStart =
+    altSigil .>> leftParen <?> "start of struct"
 
 let rightParen =
     whitespace >>. pchar ')' <?> "right parenthesis"
 
 let leftBracket =
     pchar '[' .>> whitespace <?> "left bracket"
+
+let mapStart =
+    altSigil .>> leftBracket <?> "start of map"
 
 let rightBracket =
     whitespace >>. pchar ']' <?> "right bracket"
@@ -130,7 +162,10 @@ let semi =
 
 (* Literals *)
 
-
+(*
+    An identifier must follow this regex:
+    ([A-Za-z]+[a-z]* )(\-{1,2}[A-Za-z]+[a-z]* )*[\?\!\*]{0,1}
+*)
 let pBaseIdentifier =
     let upperOrLowerAlpha = anyOf ([ 'A' .. 'Z' ] @ [ 'a' .. 'z' ])
     let lowerAlpha = anyOf [ 'a' .. 'z' ]
@@ -163,6 +198,7 @@ let pBaseIdentifier =
 
 let chakraVar =
     pBaseIdentifier
+    .>>. opt (many (pchar '.' >>. pBaseIdentifier ))
     |>> ChakraVar
     <?> "valid identifier"
 
@@ -224,7 +260,7 @@ let chakraNumber =
     |>> convertToNumber
     <?> "number"
 
-let validChars =
+let pValidChars =
     let unescapedChar =
         let label = "char"
 
@@ -266,25 +302,25 @@ let validChars =
     unescapedChar <|> escapedChar <|> unicodeChar
 
 let chakraString =
-    between pdoublequote (many validChars) pdoublequote
+    between pdoublequote (many pValidChars) pdoublequote
     |>> charListToStr
     |>> ChakraString
     <?> "string"
 
-let chakraIgnore = pchar '_' <?> "ignore"
+let pIgnore = pchar '_' <?> "ignore"
 
-let chakraRest = pstring "..." <?> "rest"
+let pRest = pstring "..." <?> "rest"
 
-let rawTuple =
+let pTuple =
     between leftParen (sepBy chakraExpr whitespace) rightParen
 
-let chakraTuple = rawTuple |>> ChakraTuple <?> "tuple"
+let chakraTuple = pTuple |>> ChakraTuple <?> "tuple"
 
 let chakraStruct =
     let structPair =
         (pBaseIdentifier .>> equal) .>>. chakraExpr
 
-    between leftParen (sepBy1 structPair whitespace) rightParen
+    between structStart (sepBy1 structPair whitespace) rightParen
     |>> ChakraStruct
     <?> "struct"
 
@@ -299,11 +335,11 @@ let chakraMap =
         (chakraLiteral .>> equal) .>>. chakraExpr
 
     let nonEmptyMap =
-        between leftBracket (sepBy mapPair whitespace) rightBracket
+        between mapStart (sepBy mapPair whitespace) rightBracket
         |>> ChakraMap
 
     let emptyMap =
-        between leftBracket equal rightBracket
+        between mapStart equal rightBracket
         >>% ChakraMap []
 
     emptyMap <|> nonEmptyMap <?> "map"
@@ -326,29 +362,80 @@ let chakraLambda =
 let flattenTuple (a, (b, c)) = (a, b, c)
 
 let chakraApply =
-    ((pBaseIdentifier |>> string) .>> leftParen)
-    .>>. sepBy chakraExpr whitespace
-    .>> rightParen
+    pBaseIdentifier
+    .>>. opt (many1 (pchar '.' >>. pBaseIdentifier))
+    .>>. between leftParen (sepBy chakraExpr whitespace1) rightParen
     |>> ChakraApply
     <?> "apply"
 
 let chakraMatchClause =
+    // We need to be able to parse other forms to make literals
+    // The basic literals: strings, numbers, and symbols
+    // Tuples like: ( a b _ )
+    //
+    // Structs like:
+    // %(
+    //     a = b
+    //     c
+    // ..)
+    //
+    // Maps like:
+    // %[
+    //     %( foo = "bar" ) = x ; Destructuring keys
+    // ...] ; May have other keys
+    // or like:
+    // %[
+    //    y = x ; where y is bound already
+    // ...]
+    // or like:
+    // %[
+    //    "foo" = bar
+    // ] ; exact form
+    //
+    // Lists like:
+    // [ a _ c ...rest ] ; binding to some elements, ignoring others, collecting the tail
     pipe
     >>. chakraLiteral
     .>> arrow
     .>>. chakraExprList
-    .>> whitespace
+    .>> whitespace1
     |>> ChakraMatchClause
     <?> "match clause"
 
 let chakraMatch =
     (chakraLiteral .>> questionMark)
-    .>> whitespace
+    .>> whitespace1
     .>>. many1 chakraMatchClause
     |>> ChakraMatch
 
 let chakraBindingPattern =
-    pBaseIdentifier |>> ChakraSimpleBindingPattern
+    let simple =
+        pBaseIdentifier
+        |>> ChakraSimpleBindingPattern
+        <?> "simple binding pattern"
+
+    let func =
+        pBaseIdentifier
+        .>> leftParen
+        .>>. sepBy pBaseIdentifier whitespace1
+        .>> rightParen
+        |>> fun (name, args) -> ChakraFunctionBindingPattern { Name = name ; Args = args ; IsAbstract = false }
+        <?> "function binding pattern"
+
+    let abstract' =
+        pBaseIdentifier
+        .>> whitespace1
+        .>>. sepBy1 pBaseIdentifier whitespace1
+        |>> fun (name, args) -> ChakraFunctionBindingPattern { Name = name ; Args = args ; IsAbstract = true }
+        <?> "abstract binding pattern"
+    
+    let destructured =
+        chakraLiteral
+        |>> ChakraDestructuredBindingPattern
+        <?> "destructured binding pattern"
+
+    abstract' <|> simple <|> func <|> destructured
+    <?> "binding pattern"
 
 let rec chakraBinding =
     (chakraBindingPattern .>> equal)
@@ -356,6 +443,7 @@ let rec chakraBinding =
     |> withPosition
     |>> flattenTuple
     |>> ChakraBinding
+    <?> "Binding"
 
 let chakraLiteralExpr =
     chakraLiteral
@@ -425,7 +513,48 @@ let docComment =
 
 let newline = pchar '\n'
 
+(* Imports *)
+let pRootImport =
+    pstring "/root"
+    >>. pchar '/' >>. pBaseIdentifier
+    <?> "Root import"
+
+let pPackageImport =
+    pchar '/'
+    >>. pBaseIdentifier
+    <?> "Package import"
+
+let pRelativeImport =
+    pstring "./"
+    >>. pBaseIdentifier
+    <?> "Relative import"
+
+let pImportDestructuring =
+    between leftParen (many1 pBaseIdentifier) rightParen
+    <?> "Import destructuring"
+
+let chakraImport =
+    let simple = pBaseIdentifier |>> ChakraSimpleImportBinding
+    let destructured =
+        let addBinding map binding = Map.add binding binding map
+        let createBindings bindings =
+            List.fold addBinding (Map ([||])) bindings
+
+        pImportDestructuring
+        |>> (createBindings >> ChakraDestructuredImportBinding)
+
+    let binding = simple <|> destructured
+    let rootImport (typ, string) = ChakraLocalImport { Library = string ; Typ = typ ; Relative = false }
+    let relativeImport (typ, string) = ChakraLocalImport { Library = string ; Typ = typ ; Relative = true }
+    let packageImport (typ, string) = ChakraPackageImport { PackageName = string ; Typ = typ }
+
+    (binding .>> equal .>>. pRootImport |>> rootImport)
+    <|> (binding .>> equal .>>. pPackageImport |>> packageImport)
+    <|> (binding .>> equal .>>. pRelativeImport |>> relativeImport)
+    <?> "import"
+
 (* Modules *)
+
 let chakraModuleDef =
     let tupleLike =
         between leftParen (sepBy pBaseIdentifier whitespace1) rightParen
@@ -437,10 +566,11 @@ let chakraModuleDef =
     <?> "Module export definition"
 
 let chakraModule =
-    opt docComment
-    .>>. chakraModuleDef
-    .>>. many1 chakraBinding
-    |>> (fun ((c, exports), bindings) ->
+    let possibleImportSection =
+        opt ((many1 (chakraImport .>> newline)) .>> many1 newline)
+        |>> (Option.defaultValue [])
+
+    let buildModule (((c, exports), imports), bindings) =
         let comment =
             match c with
             | None -> None
@@ -449,7 +579,17 @@ let chakraModule =
             DocComments = comment
             Exports = exports
             Bindings = bindings
-        })
+            Imports = imports
+        }
+    
+    let topLevelBindings =
+        many1 (opt docComment >>. chakraBinding .>> many1 newline)
+
+    opt docComment
+    .>>. chakraModuleDef
+    .>>. possibleImportSection
+    .>>. topLevelBindings
+    |>> buildModule
     <?> "module"
 
 (* Set refs *)
@@ -474,8 +614,8 @@ chakraExprRef
 <?> "expression"
 
 chakraExprListRef
-:= many chakraBinding
+:= many (chakraBinding .>> (many1 newline))
 .>>. chakraExpr
-.>> whitespace
+.>> many1 newline
 |>> ChakraExprList
 <?> "expression list"

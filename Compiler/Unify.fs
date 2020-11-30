@@ -53,7 +53,7 @@ let typeListToType types =
 let rec exprType (env: Env) expr =
     match expr with
     | ChakraLiteralExpr (_, literal) -> literalType env literal
-    | ChakraApplyExpr (_, (ChakraApply (ident, exprs))) ->
+    | ChakraApplyExpr (_, (ChakraApply ((ident, _), exprs))) ->
         let fType = Option.defaultValue UnknownType (getTypeForBinding ident env)
         match fType with
         | FunctionType (_, t) -> t
@@ -63,6 +63,7 @@ let rec exprType (env: Env) expr =
         |> List.map (fun (ChakraMatchClause (pattern, exprList)) -> exprListType env exprList)
         |> List.fold gatherTypes []
         |> typeListToType
+    | ChakraNativeExpr (_) -> UnknownType
 
 
 and reduceExprs env exprs =
@@ -102,7 +103,7 @@ and literalType env literal =
 
     | ChakraVector items -> items |> reduceExprs env |> VectorType
 
-    | ChakraVar name ->
+    | ChakraVar (name, fields) ->
         match getTypeForBinding name env with
         | Some t -> t
         | _ -> UnknownType

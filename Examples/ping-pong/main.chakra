@@ -8,10 +8,17 @@
     init
 )
 
-; This is importing from the stdlib's IO library
+; This is importing the stdlib's IO library
+( io ) = /stdlib
+useless = ./useless
+
 ; print is a function that is destructured from the
 ; library
-( print ) = /stdlib.io
+( print ) = io
+( a-constant ) = useless
+
+
+foo = a-constant
 
 ;; This is the function called on the Actor when it is
 ;; first being created.  The Main Actor is passed a struct

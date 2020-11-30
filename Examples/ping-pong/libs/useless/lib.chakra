@@ -1,0 +1,5 @@
+= (
+    a-constant
+)
+
+a-constant = #this-is-a-symbol
