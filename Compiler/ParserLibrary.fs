@@ -33,8 +33,19 @@ type Parser<'a> =
     { ParseFn: InputState -> Result<'a * InputState>
       Label: ParserLabel }
 
+(*
+    Result utils
+*)
 
+let resultMap f (r: Result<'a>) =
+    match r with
+    | Success a -> Success (f a)
+    | Failure (l, e, p) -> Failure (l, e, p)
 
+let resultfFMap (f: (Result<'a>) -> Result<'b>) (r: Result<'a>) =
+    match r with
+    | Failure (l, e, p) -> Failure (l, e, p)
+    | _ -> f r
 
 (*
 ** Text input handling
@@ -115,15 +126,17 @@ let parserPositionFromInputState (inputState: InputState) =
       Line = inputState.Position.Line
       Column = inputState.Position.Column }
 
-let printResult result =
+let resultString result =
     match result with
-    | Success (value, input) -> printfn "%A" value
+    | Success (value, input) -> sprintf "%A" value
     | Failure (label, error, parserPos) ->
         let errorLine = parserPos.CurrentLine
         let colPos = parserPos.Column
         let linePos = parserPos.Line
         let failureCaret = sprintf "%*s^%s" colPos "" error
-        printfn "Line:%i Col:%i Error parsing %s\n%s\n%s" linePos colPos label errorLine failureCaret
+        sprintf "Line:%i Col:%i Error parsing %s\n%s\n%s" linePos colPos label errorLine failureCaret
+
+let printResult result = printfn "%s" (resultString result)
 
 (*
 ** Running

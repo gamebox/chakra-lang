@@ -161,9 +161,3 @@ let replLoop () =
             | Incomplete -> loop types bindings (line :: lines)
 
     loop (Env.createEnv ()) (new Map<string, ChakraParser.ChakraBinding>([])) []
-
-module Console =
-    let csi = "\e["
-    let cursorLeft n = printf "%s%dD" csi n
-
-    let cursorMoveToX x = printf "%s%dG" csi x

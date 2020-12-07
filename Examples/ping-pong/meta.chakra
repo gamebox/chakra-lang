@@ -3,10 +3,10 @@
 ;; allowed language constructs.  Only a definition and top-
 ;; level bindings bound to literals is allowed, as well as
 ;; comments (doc or line)
-= (
-    name
-    authors
-    license
+= %(
+    name,
+    authors,
+    license,
     deps
 )
 

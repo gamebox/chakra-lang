@@ -1,5 +1,104 @@
-= (
-    a-constant
+; This module demonstrates a number of value types, and the various syntactic constructions around them
+= %(
+    a-constant ; An example of struct punning.  The field has the same name as the bound definition
 )
 
-a-constant = #this-is-a-symbol
+a-number = 3.14 ; Numbers are all DEC64 floating point.
+
+a-text = "Hello world!" ; Texts are binary blobs
+
+a-constant = #this-is-a-symbol ; Symbols are static, immutable items only equal to themselves
+
+one-tuple-test-one = ( 1 ) ; Tuples by convention have whitespace between the parens and the items
+
+one-tuple-test-two = ( ( 1 ) ) ; Tuple in a tuple.  They can contain items of any type
+
+two-tuple-test-one = ( 1.23, a-constant ) ; Tuples are ordered collections of heterogeneous types
+
+large-tuple-test-one = (
+    "This",
+    "is",
+    1,
+    "big",
+    #tuple
+) ; Tuples can have an arbitrarily large number of items, but get unweildy to use after about 5
+
+struct-test-one = %(
+    field = "value", ; items are of the form `name = VALUE` separated by commas, and may have a trailing comma
+) ; Structs are like tuples, but where the items are accessed by name. Prefered when there are more than three items
+
+struct-test-two = %( field = "value" ) ; They can be defined on one line, but by convention this is only done for at most one item.
+
+struct-punning-test = %(
+    a-text, ; instead of `a-text = a-text`
+    a-number, ; instead of `a-number = a-number`
+) ; If a field is bound to a local definition of the same name, this shorthand can be used
+
+struct-update-test = %(
+    ...struct-punning-test, ; must be the first item
+    a-text = "Something else" ; overriding this field
+) ; You can construct a new instance of a struct with some fields changed with this easy syntax.
+
+list-test-one = [ 1 ] ; List are ordered, iterable collections of items of the same type.
+
+list-test-two = [
+    "more", ; separated by commas
+    "than",
+    "one",
+    "item", ; can have trailing comma
+] ; By convention, lists with mulitple items are defined with each item on its own line.
+
+list-spread-test-one = [
+    "I",
+    "contain",
+    ...list-test-two ; must be in the last position
+] ; You can place another list as the cons of a new list with this syntax
+
+map-test-one = %[ "foo" = "bar" ] ; Maps are hashtables of the form `KEY = VALUE` where both KEY and VALUE can each be of one type
+
+map-test-two = %[
+    #one = 1, ; items separated by commas
+    #two = 2,
+    #three = 3, ; trailing comma allowed
+] ; Keys here are symbols
+
+map-test-three = %[
+    ( #ok, "Hello" ) = 1,
+    ( #ok, "world" ) = 2,
+] ; Keys here are tuples
+
+map-test-four = %[
+    "one" = 1,
+    a-text = a-number,
+] ; Keys and values can use bound variables as well
+
+map-spread-syntax = %[
+    "three" = 3,
+    ...map-test-four ; must be last item
+] ; Maps can also be created with new (or updated) items with this syntax
+
+expression-list-test-one = ; expression list are like blocks, a series of local bindings ending in a value
+    tuple-one = ( 5, 2 ) ; local binding to expression list
+    tuple-two = ( 4, 1 )
+    tuple-three = ( 3, 0 )
+    [ tuple-one, tuple-two, tuple-three ] ; Last expression is value of binding
+
+expression-list-in-struct-one = %(
+    health = 100.0,
+    moves =
+        tuple-one = ( 5, 2 ) ; Notice indentation
+        tuple-two = ( 4, 1 )
+        tuple-three = ( 3, 0 )
+        [ tuple-one, tuple-two, tuple-three ],
+    items =
+        sword = %(
+            class = #weapon,
+            health = 100.0,
+            hit-power = 32.0
+        )
+        [ sword ]
+) ; Expression list can be used anywhere a binding is expected, like structs and map
+
+;; class tuples and class structs?
+;; #ok("Some value") ; equivalent to `( #ok, "Some value" )`
+;; %Weapon(health = 100, hit-power = 32.0) ; no direct equivalent 
