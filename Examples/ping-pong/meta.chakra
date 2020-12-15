@@ -7,7 +7,7 @@
     name,
     authors,
     license,
-    deps
+    deps,
 )
 
 ; The name of the application

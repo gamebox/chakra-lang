@@ -20,7 +20,6 @@ type Type =
 
 let genericTypeVars =
     List.map string ([ 'a' .. 'z' ] @ [ 'A' .. 'Z' ])
-
 type EnvBinding = { Typ: Type ; Expr: ChakraExpr }
 type Env = Collections.Map<string, Type>
 

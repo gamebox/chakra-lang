@@ -4,23 +4,25 @@ open System.IO
 open System.Text.RegularExpressions
 open ParserLibrary
 open ChakraParser
+open Format
 
 
 let cleaner lines =
-    let docCommentRegex = Regex "^;;"
-    let lineCommentRegex = Regex ";.*"
-    let restoreDocCommentRegex = Regex "^--"
+    // let docCommentRegex = Regex "^;;"
+    // let lineCommentRegex = Regex ";.*"
+    // let restoreDocCommentRegex = Regex "^--"
 
-    let replace (regex: Regex) (replacement: string) str =
-        regex.Replace(str, replacement)
+    // let replace (regex: Regex) (replacement: string) str =
+    //     regex.Replace(str, replacement)
 
-    let cleanLine line =
-        docCommentRegex.Replace (line, "--")
-        |> replace lineCommentRegex ""
-        |> replace restoreDocCommentRegex ";;"
+    // let cleanLine line =
+    //     docCommentRegex.Replace (line, "--")
+    //     |> replace lineCommentRegex ""
+    //     |> replace restoreDocCommentRegex ";;"
 
-    Seq.map cleanLine lines
-    |> String.concat "\n"
+    // Seq.map cleanLine lines
+    // |> String.concat "\n"
+    String.concat "\n" lines
 
 let rec gatherFiles directory =
     let dirs =
@@ -28,6 +30,7 @@ let rec gatherFiles directory =
         |> Seq.map gatherFiles
     let files =
         Directory.EnumerateFiles (directory)
+        |> Seq.filter (fun f -> f.EndsWith(".chakra"))
         |> Seq.toList
 
     List.concat
@@ -45,8 +48,9 @@ let build optPath =
     
     let fileMap = 
         Seq.fold fileFolder Map.empty chakraFilePaths
-
+    
     let fileParseResultMapper k (v: string []) =
+        printfn "Parsing %s" k
         run chakraModule (cleaner v)
 
     let cleanFileMap =
@@ -55,20 +59,20 @@ let build optPath =
     let isFailure _ result =
         match result with
         | Failure _ -> true
-        | _ -> false
+        | Success (_, is) -> not (atEndOfInput is)
 
     let (failures, successes) = Map.partition isFailure cleanFileMap
 
-    let extractModuleFolder acc (fileName: string) (result: Result<ChakraModule * InputState>) =
+    let extractModuleFolder acc (fileName: string) (result: ParserResult<ChakraModule * InputState>) =
         match result with
         | Success (m, input) ->
             // TODO: Create a function that returns a binding name based on the
             // filename and the binding name
-            let bindingName (ChakraBinding (_, pattern, _)) =
+            let bindingName ({ Pattern = pattern}) =
                 match pattern with
                 | ChakraFunctionBindingPattern info -> info.Name
                 | ChakraSimpleBindingPattern name -> name
-                | ChakraDestructuredBindingPattern (_) -> ""
+                | ChakraComplexBindingPattern _ -> ""
 
             let addFlatBinding map binding =
                 let moduleName =
@@ -76,7 +80,7 @@ let build optPath =
                         .Replace(".chakra", "")
                         .Replace(path, "")
 
-                let resolvedName = sprintf "%s:%O" moduleName (bindingName binding)
+                let resolvedName = sprintf "%s:%s" moduleName (bindingName binding)
 
                 Map.add
                     resolvedName
@@ -91,12 +95,21 @@ let build optPath =
         | Failure (label, error, parserPos) -> acc
 
     if Map.isEmpty failures then
-
-        Map.fold extractModuleFolder Map.empty successes
-        |> Map.iter (fun k v -> printfn "%s: %O" k v)
+        // Map.fold extractModuleFolder Map.empty successes
+        // |> Map.iter (fun k v -> printfn "%s\n------------------------------\n%O" k v)
+        successes
+        |> Map.iter (fun k v ->
+            match v with
+            | Success (m, _) ->
+                printfn "%s\n----------------------\n%s" k (pretty 80 (showModule m))
+            | f ->
+                printfn "WTF?")
     else
         let printFailure fileName result =
-            printfn "%s\n================" fileName
-            printResult result
+            printfn "%s\n------------------------\n" fileName
+            match result with
+            | Success(_, is) when not (atEndOfInput is) ->
+                printfn "Was not able to parse the entire module, ended on (%d, %d):\n%s" is.Position.Line is.Position.Column (currentLine is)
+            | _ -> printResult result
 
         Map.iter printFailure failures

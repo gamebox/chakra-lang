@@ -1,17 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <TargetFramework>net50</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="ParserLibraryCSP.fs" />
     <Compile Include="ParserLibrary.fs" />
     <Compile Include="ChakraParser.fs" />
     <Compile Include="Env.fs" />
     <Compile Include="Unify.fs" />
     <Compile Include="Command.fs" />
-    <!-- <Compile Include="Repl.fs" />
-    <Compile Include="Build.fs" /> -->
     <Compile Include="Format.fs" />
-    <!-- <Compile Include="Program.fs" /> -->
+    <Compile Include="Build.fs" />
+    <Compile Include="Program.fs" />
   </ItemGroup>
 </Project>

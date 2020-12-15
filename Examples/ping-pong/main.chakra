@@ -9,16 +9,18 @@
 )
 
 ; This is importing the stdlib's IO library
+
 %( io ) = /stdlib
-useless = ./useless
+%( useless ) = ./useless
 
 ; print is a function that is destructured from the
 ; library
-%( print ) = io
-%( a-constant ) = useless
+; %( print ) = io
+; %( a-constant ) = useless
 
 
 foo = a-constant
+
 
 ;; This is the function called on the Actor when it is
 ;; first being created.  The Main Actor is passed a struct
@@ -26,14 +28,14 @@ foo = a-constant
 init(caps) =
     ; stdio is a capability that allows an Actor to send
     ; data to stdio.  It is destructured here.
-    %( stdio ) = caps
+    stdio = caps.stdio
 
     ; The return value of the init function for the Main
     ; Actor should be a state for the Actor (here an empty
     ; tuple - also known as unit) and a list of messages to
     ; send.
     (
-        ()
+        (),
         [
             ; This creates a message that is sent to the root
             ; process that causes the string argument to be

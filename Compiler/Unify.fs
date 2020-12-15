@@ -78,17 +78,17 @@ and literalType env literal =
     | ChakraSymbol _ -> SymbolType
     | ChakraString _ -> StringType
     | ChakraTuple items -> TupleType(List.map (exprType env) items)
-    | ChakraStruct fields ->
+    | ChakraStruct  { Fields = fields } ->
         fields
-        |> List.map (fun (label, expr) -> (label, exprType env expr))
+        |> List.map (fun field-> (field.Name, exprType env field.Value))
         |> StructType
 
-    | ChakraList items -> items |> reduceExprs env |> ListType
+    | ChakraList { Items = items } -> items |> reduceExprs env |> ListType
 
-    | ChakraMap entries ->
+    | ChakraMap { Pairs = entries } ->
         let (keyTypes, valueTypes) =
             entries
-            |> List.fold (fun (keys, values) (key, value) ->
+            |> List.fold (fun (keys, values) ({ Key = key ; Value = value}) ->
                 let keyType = literalType env key
                 let valueType = exprType env value
                 (keyType :: keys, valueType :: values)) ([], [])
@@ -100,8 +100,6 @@ and literalType env literal =
              valueTypes
              |> List.fold gatherTypes []
              |> typeListToType)
-
-    | ChakraVector items -> items |> reduceExprs env |> VectorType
 
     | ChakraVar (name, fields) ->
         match getTypeForBinding name env with
@@ -124,7 +122,7 @@ and literalType env literal =
 
 and exprListType env (ChakraExprList (bindings, expr)) =
     let reduceBindings =
-        fun env1 (ChakraBinding (_, pattern, exprList, _)) ->
+        fun env1 ({ ExprList = exprList ; Pattern = pattern }) ->
             match pattern with
             | ChakraSimpleBindingPattern name -> addBinding name (exprListType env1 exprList) env1
             | _ -> env1
@@ -133,7 +131,7 @@ and exprListType env (ChakraExprList (bindings, expr)) =
     |> List.fold reduceBindings env
     |> (fun env1 -> exprType env1 expr)
 
-and bindingType (env: Env) (ChakraBinding (_, pattern, exprList, _)) = exprListType env exprList
+and bindingType (env: Env) ({ ExprList = exprList ; Pattern = pattern }) = exprListType env exprList
 
 
 (**************************************************************************************************

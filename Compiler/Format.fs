@@ -86,7 +86,7 @@ let rec layout doc =
     match doc with
     | Nil -> ""
     | Text (s, x) -> s + (layout x)
-    | Line (i, x) -> "\n" + String.replicate i " " + layout x
+    | Line (i, x) -> "\n" + String.replicate i "\t" + layout x
 
 (* copy i x = [ x | _ <- [1..i] ] *)
 let copy i x = List.map (fun _ -> x) [ 1 .. i ]
@@ -179,7 +179,7 @@ let block n ops =
 *)
 
 let bracket l x r =
-    group (text l <&> nest 2 (line <&> x) <&> line <&> text r)
+    group (text l <&> nest 1 (line <&> x) <&> line <&> text r)
 
 (* x <+/> y = x <> (text " " :<|> line) <> y *)
 let (<+/>) x y = x <&> FlattenOp(text " ", line) <&> y
@@ -207,6 +207,42 @@ let rec fill ops =
 
 let withComma s = TextOp(sprintf "%s," s)
 let opWithComma op = op <&> TextOp ","
+let opWithNewline op = op <&> line
+
+let rec shouldStayOnOneLine expr nestingLevel =
+    match expr with
+    | ChakraApplyExpr (_, ChakraApply ((_, pathSegments), exprs)) -> (pathSegments.Length + exprs.Length) < 2
+    | ChakraMatchExpr _ -> false
+    | ChakraLiteralExpr (_, lit) ->
+        match lit with
+        | ChakraVar (s, path) -> true
+        | ChakraNumber _ -> true
+        | ChakraString s -> s.Length < 15
+        | ChakraSymbol s -> s.Length < 15
+        | ChakraLambda _ -> false
+        | ChakraTuple items ->
+            items.Length
+            <= 1
+            && nestingLevel = 0
+            && shouldStayOnOneLine (List.head items) (nestingLevel + 1)
+        | ChakraList { Items = items; Spread = spread } ->
+            if spread <> None then
+                false
+            else
+                items.Length
+                <= 1
+                && nestingLevel = 0
+                && shouldStayOnOneLine (List.head items) (nestingLevel + 1)
+        | ChakraStruct { Fields = fs; Spread = spread } ->
+            if spread <> None then
+                false
+            else
+                fs.Length
+                <= 1
+                && nestingLevel = 0
+                && shouldStayOnOneLine (List.head fs).Value (nestingLevel + 1)
+        | ChakraMap _ -> false
+    | ChakraNativeExpr _ -> false
 
 let rec showModule (mod': ChakraModule) =
     let doc =
@@ -222,24 +258,50 @@ let rec showModule (mod': ChakraModule) =
     <&> block 0 (List.map (showImport) mod'.Imports)
     <&> line
     <&> line
-    <&> block 0 (List.map (showBinding) mod'.Bindings)
+    <&> block 0 (List.map (opWithNewline << showBinding) mod'.Bindings)
 
 and createFullId (id, maybePath) =
     (id
-             + (Option.defaultValue [] maybePath
-                |> String.concat ""))
+     + (Option.defaultValue [] maybePath
+        |> String.concat "."))
 
 and showLiteral (lit: ChakraLiteral) =
     match lit with
-    | ChakraVar id -> TextOp (createFullId id)
-    | ChakraNumber num -> TextOp (sprintf "%f" num)
-    | ChakraSymbol s -> TextOp (sprintf "#%s" s)
-    | ChakraString s -> TextOp (sprintf "\"%s\"" s)
-    | ChakraTuple items -> TextOp "()"
+    | ChakraVar id -> TextOp(createFullId id)
+    | ChakraNumber num -> TextOp(sprintf "%f" num)
+    | ChakraSymbol s -> TextOp(sprintf "#%s" s)
+    | ChakraString s -> TextOp(sprintf "\"%s\"" s)
+    | ChakraTuple [] -> TextOp "()"
+    | ChakraTuple [ item ] ->
+        if shouldStayOnOneLine item 0 then
+            TextOp "( " <&> showExpr item <&> TextOp " )"
+        else
+            text "("
+            <&> (block 1 (List.map (opWithComma << showExpr) [ item ]))
+            <&> line
+            <&> text ")"
+    | ChakraTuple items ->
+        text "("
+        <&> (block 1 (List.map (opWithComma << showExpr) items))
+        <&> line
+        <&> text ")"
     | ChakraStruct fields -> TextOp "%()"
-    | ChakraList items -> TextOp "[]"
+    | ChakraList { Items = []; Spread = None } -> TextOp "[]"
+    | ChakraList { Items = []; Spread = Some (_, var) } ->
+        let flattenedVar =
+            var.First
+            + String.concat "." (Option.defaultValue [] var.Rest)
+
+        TextOp "[ "
+        <&> (text (sprintf "...%s" flattenedVar))
+        <&> TextOp " ]"
+    | ChakraList { Items = [ item ]; Spread = spread } -> TextOp "[ " <&> showExpr item <&> TextOp " ]"
+    | ChakraList { Items = items; Spread = spread } ->
+        text "["
+        <&> (block 1 (List.map (opWithComma << showExpr) items))
+        <&> line
+        <&> text "]"
     | ChakraMap pairs -> TextOp "%[]"
-    | ChakraVector items -> TextOp "{}"
     | ChakraLambda l -> TextOp "{ () -> }"
 
 and showMatchClause (ChakraMatchClause (lit, exprList)) = TextOp "ChakraMatchClause"
@@ -248,44 +310,77 @@ and showExpr (expr: ChakraExpr) =
     match expr with
     | ChakraLiteralExpr (_, lit) -> showLiteral lit
     | ChakraMatchExpr (_, ChakraMatch (list, clauses)) -> TextOp "ChakraMatchExpr"
-    | ChakraApplyExpr (_, ChakraApply (id, args)) ->
-        let fullId = createFullId id
+    | ChakraApplyExpr (_, ChakraApply ((id, path), [])) ->
+        let fullId = (id + (String.concat "." path))
+        TextOp(sprintf "%s()" fullId)
+    | ChakraApplyExpr (_, ChakraApply ((id, path), [ arg ])) ->
+        let fullId = (id + (String.concat "." path))
 
-        TextOp(sprintf "%s(" fullId)
-        <+> TextOp "...args..."
-        <+> TextOp ")"
+        if shouldStayOnOneLine arg 0 then
+            TextOp(sprintf "%s( " fullId)
+            <&> showExpr arg
+            <&> TextOp " )"
+        else
+            text "("
+            <&> (block 1 (List.map (opWithComma << showExpr) [ arg ]))
+            <&> line
+            // How to deal with this?
+            <&> text ")" // THis is here
+    | ChakraApplyExpr (_, ChakraApply ((id, path), args)) ->
+        let fullId = (id + (String.concat "." path))
+
+        text (sprintf "%s(" fullId)
+        <&> (block 1 (List.map (opWithComma << showExpr) args))
+        <&> line
+        <&> text ")"
     | ChakraNativeExpr s -> TextOp(sprintf "$$NATIVE$$%s$$" s)
 
 and showExprList (ChakraExprList (bs, expr)) =
     match bs with
-    | [] ->
-        showExpr expr
-    | _ -> 
-        let bindingOps = (List.map (showBinding) bs)
+    | [] -> showExpr expr
+    | _ ->
+        let bindingOps =
+            (List.map (opWithNewline << showBinding) bs)
+
         let exprOpAsList = [ (showExpr expr) ]
-        block 2 (List.concat [ bindingOps; exprOpAsList ])
+        block 1 (List.concat [ bindingOps; exprOpAsList ])
 
 and showBindingPattern (patt: ChakraBindingPattern) =
     match patt with
     | ChakraSimpleBindingPattern name -> TextOp(sprintf "%s =" name)
-    | ChakraFunctionBindingPattern (_) -> TextOp "ChakraFunctionBindingPattern"
+    | ChakraFunctionBindingPattern { Name = n; Args = a } -> TextOp(sprintf "%s(%s) =" n (String.concat ", " a))
+    | ChakraComplexBindingPattern (_) -> TextOp "PATTERN ="
 
-and showBinding (ChakraBinding (_, patt, exprList, optComment)) =
+and showBinding ({ Loc = _; DocComment = optComment; Pattern = patt; ExprList = exprList }) =
     (Option.defaultValue
         NilOp
-        (Option.map (fun (c) -> (showComment { Content = c ; IsDoc = true }) <&> line) optComment))
-    <&>  showBindingPattern patt
+         (Option.map (fun c ->
+             (showComment { Content = c; IsDoc = true })
+             <&> line) optComment))
+    <&> showBindingPattern patt
     <+> showExprList exprList
 
 and showBindingType (typ: ChakraImportBindingType) =
     match typ with
     | ChakraSimpleImportBinding name -> TextOp(sprintf "%s =" name)
-    | ChakraDestructuredImportBinding bMap ->
+    | ChakraDestructuredImportBinding bMap when bMap.Count <= 1 ->
+        let (k, v) = List.head (Map.toList bMap)
+        if k = v then
+            text "%( " <&> text k <&> text " )"
+        else
+            text "%( "
+            <&> text (sprintf "%s = %s" k v)
+            <&> text " )"
+
+    | ChakraDestructuredImportBinding bMap when bMap.Count > 1 ->
         let pairs =
-            List.map (fun (k, v) -> (TextOp v)) (Map.toList bMap)
+            let pairOp (k, v) =
+                if k = v then text k else text (sprintf "%s = %s" k v)
+
+            List.map pairOp (Map.toList bMap)
 
         text "%("
-        <&> (block 2 (List.map (opWithComma) pairs))
+        <&> (block 1 (List.map (opWithComma) pairs))
         <&> line
         <&> text ") ="
 
@@ -309,12 +404,12 @@ and showComment (comment: ChakraComment) =
 
 and showModuleDef (exports: string list) =
     text "= %("
-    <&> (block 2 (List.map (withComma) exports))
+    <&> (block 1 (List.map (withComma) exports))
     <&> line
     <&> text ")"
 
 let tabs i =
-    (List.fold (fun acc _ -> sprintf "%s%s" "  " acc) "" [ 1 .. i ])
+    (List.fold (fun acc _ -> sprintf "%s%s" "\t" acc) "" [ 1 .. i ])
 
 let rec showOp op i =
     match op with

@@ -1,5 +1,5 @@
-﻿open Repl
-
+﻿//open Repl
+open Build
 let versionInfo = "chakra v0.0.1"
 let help =
     sprintf "\
@@ -16,18 +16,20 @@ let help =
 
 [<EntryPoint>]
 let main argv =
-    match Command.fromArgs argv with
+    match Command.fromArgs [|"build"|] with
     | Ok command ->
         match command with
         | Command.Repl ->
             printfn "%s" versionInfo
-            replLoop ()
+            // replLoop ()
         | Command.Help ->
             printfn "%s" help
         | Command.Version ->
             printfn "%s" versionInfo
         | Command.Build optPath ->
-            printfn "Build not yet implemented"
+            //Blah.test ChakraParser.chakraBinding
+            build (Some "/home/anthony/dev/chakra-lang/Examples/ping-pong")
+            //printfn "Build not yet implemented"
             
         0
     | Error err ->
