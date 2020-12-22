@@ -11,12 +11,13 @@ let help =
     │ repl          Starts an interactive REPL shell                         │\n\
     │ build [path]  [TODO] Build an app in the current directory if path is  │\n\
     │               is not specified, or the app in the directory specified. │\n\
+    │ format PATH   Formats the Chakra file at PATH                          │\n\
     │                                                                        │\n\
     └────────────────────────────────────────────────────────────────────────┘" versionInfo
 
 [<EntryPoint>]
 let main argv =
-    match Command.fromArgs [|"build"|] with
+    match Command.fromArgs argv with
     | Ok command ->
         match command with
         | Command.Repl ->
@@ -30,6 +31,9 @@ let main argv =
             //Blah.test ChakraParser.chakraBinding
             build (Some "/home/anthony/dev/chakra-lang/Examples/ping-pong")
             //printfn "Build not yet implemented"
+        | Command.Format str ->
+            Format.format str
+        
             
         0
     | Error err ->

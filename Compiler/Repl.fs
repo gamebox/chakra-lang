@@ -12,7 +12,7 @@ type ReplInput =
 type ReplInputState =
     | Incomplete
     | ParseSuccess of (string * Env.Env * Map<string, ChakraParser.ChakraBinding>)
-    | ParseError of ParserLibrary.Result<ReplInput * ParserLibrary.InputState>
+    | ParseError of ParserLibrary.ParserResult<ReplInput * ParserLibrary.InputState>
 
 type ReplBindings = Map<string, ChakraParser.ChakraBinding>
 

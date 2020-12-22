@@ -3,6 +3,7 @@ module Command
 type Command =
     | Repl
     | Build of string option
+    | Format of string
     | Help
     | Version
 
@@ -14,6 +15,10 @@ let fromArgs argv =
         Ok (Build None)
     | [|"repl"|] ->
         Ok Repl
+    | [| "format"; str|] ->
+        Ok (Format str)
+    | [| "format" |] ->
+        Error ("Format requires a path to be supplied")
     | [|"help"|] ->
         Ok Help
     | [| "version" |] ->

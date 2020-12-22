@@ -23,8 +23,6 @@ let rec print typ =
 
     | ListType genericType -> sprintf "[ %s ]" (print genericType)
 
-    | VectorType genericType -> sprintf "{ %s }" (print genericType)
-
     | MapType (keyType, valueType) -> sprintf "[ %s = %s ]" (print keyType) (print valueType)
 
     | StructType fields ->
@@ -64,7 +62,6 @@ let rec exprType (env: Env) expr =
         |> List.fold gatherTypes []
         |> typeListToType
     | ChakraNativeExpr (_) -> UnknownType
-
 
 and reduceExprs env exprs =
     exprs
@@ -131,7 +128,17 @@ and exprListType env (ChakraExprList (bindings, expr)) =
     |> List.fold reduceBindings env
     |> (fun env1 -> exprType env1 expr)
 
-and bindingType (env: Env) ({ ExprList = exprList ; Pattern = pattern }) = exprListType env exprList
+and bindingType (env: Env) ({ ExprList = exprList ; Pattern = pattern }) =
+    let bindings =
+        match pattern with
+        | ChakraSimpleBindingPattern _ -> []
+        | ChakraFunctionBindingPattern { Args = args } ->
+            List.map (fun a -> (a, UnknownType) ) args
+        | ChakraComplexBindingPattern patt ->
+            match patt with
+            
+    let env' = newScope bindings env
+    exprListType env' exprList
 
 
 (**************************************************************************************************
@@ -146,7 +153,7 @@ let literalTypeTests () =
         |> (fun result ->
             match result with
             | ParserLibrary.Success (literal, _) ->
-                let resultType = literalType (createEnv ()) literal
+                let resultType = literalType (defaultEnv) literal
                 if resultType = typ
                 then printfn "%s : %s" input (print resultType)
                 else printfn "FAILED: %s\n%s <> %s" label (print resultType) (print typ)
@@ -162,13 +169,6 @@ let literalTypeTests () =
       ("A complex list",
        "[ 1 #two \"three\" ]",
        ListType
-           (UnionType [ StringType
-                        NumberType
-                        SymbolType ]))
-      ("A simple vector", "{ 1 2 3 }", VectorType NumberType)
-      ("A complex list",
-       "{ 1 #two \"three\" }",
-       VectorType
            (UnionType [ StringType
                         NumberType
                         SymbolType ]))

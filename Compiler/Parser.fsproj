@@ -4,6 +4,7 @@
     <TargetFramework>net50</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="CConsole.fs" />
     <Compile Include="ParserLibraryCSP.fs" />
     <Compile Include="ParserLibrary.fs" />
     <Compile Include="ChakraParser.fs" />

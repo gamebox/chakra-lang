@@ -1,0 +1,146 @@
+
+;; This module demonstrates a number of value types, and the various syntactic constructions around them
+= %(
+	a-constant,
+)
+
+
+
+
+a-number = 3.14
+
+a-text = "Hello world!"
+
+a-constant = #this-is-a-symbol
+
+one-tuple-test-one = ( 1 )
+
+one-tuple-test-two = ( ( 1 ) )
+
+two-tuple-test-one = (
+	1.23,
+	a-constant,
+)
+
+large-tuple-test-one = (
+	"This",
+	"is",
+	1,
+	"big",
+	#tuple,
+)
+
+struct-test-one = %( field = "value" )
+
+struct-test-two = %( field = "value" )
+
+struct-punning-test = %(
+	a-text,
+	a-number,
+)
+
+struct-update-test = %( a-text = "Something else" )
+
+list-test-one = [
+	1,
+]
+
+list-test-two = [
+	"more",
+	"than",
+	"one",
+	"item",
+]
+
+list-spread-test-one = [
+	"I",
+	"contain",
+	...list-test-two,
+]
+
+map-test-one = %["foo"  = "bar",]
+
+map-test-two = %[
+	#one  = 1,
+	#two  = 2,
+	#three  = 3,
+]
+
+map-test-three = %[
+	(
+		#ok,
+		"Hello",
+	)  = 1,
+	(
+		#ok,
+		"world",
+	)  = 2,
+]
+
+map-test-four = %[
+	"one"  = 1,
+	a-text  = a-number,
+]
+
+map-spread-syntax = %["three"  = 3,]
+
+expression-list-test-one = 
+	tuple-one = (
+		5,
+		2,
+	)
+	
+	tuple-two = (
+		4,
+		1,
+	)
+	
+	tuple-three = (
+		3,
+		0,
+	)
+	
+	[
+		tuple-one,
+		tuple-two,
+		tuple-three,
+	]
+
+match-test(arg-one) = 
+	arg-one ?
+	| 1 -> #one
+	| "Two" -> #two
+	| #Three -> #three
+	| (  4, _, ) -> #four
+	| %( 
+		Five = 5,
+		...other,
+	 ) -> #five
+	| [
+		1,
+		2,
+		_,
+		4,
+		5,
+		...six,
+	] -> 
+		a = 1
+		
+		#six
+	| %[
+		"Seven" = 7,
+		...others,
+	] -> #seven
+
+pipe-test(arg) = 
+	arg
+	> fn( 23 )
+	
+
+named-app-test(arg) = 
+	some-func(
+		arg-two = 32,
+		other-arg = #hello,
+		arg,
+	)
+

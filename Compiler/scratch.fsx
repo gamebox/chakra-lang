@@ -1,23 +1,27 @@
+#load "CConsole.fs"
 #load "ParserLibrary.fs"
 #load "ChakraParser.fs"
-#load "Format.fs"
 
 open ParserLibrary
 open ChakraParser
-open Format
 
 let m =
     """
+a =
+    foo(b) =
+        add(1, b)
+    else = 34
+    thing = #symbol
+    here = "Hi"
 
-;; Hello there!
-this =
-    something = ( ( boo, boo ) )
-    tutu = []
-    ( "Hello world!", 1324344234234, #hello!)
-    """.Trim ([| '\t'; '\n' |])
+    io
+    > foo(bar)
+    > something(else)
+    > last(thing, here)
+    """.Trim ([| '\t'; '\n'; ' ' |])
 
-match run chakraBinding m with
-| Success (p, is) ->
-    printfn "%s" (pretty 80 (showBinding p))
-| f ->
-    printResult f
+printResult (run chakraBinding m)
+
+#load "Format.fs"
+open Format
+"\n\tA\n\tB" = (pretty 80 (block 1 [text "A" ; text "B"]))

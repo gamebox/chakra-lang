@@ -29,14 +29,14 @@ struct-test-one = %(
 
 struct-test-two = %( field = "value" ) ; They can be defined on one line, but by convention this is only done for at most one item.
 
-; struct-punning-test = %(
-;     a-text, ; instead of `a-text = a-text`
-;     a-number, ; instead of `a-number = a-number`
-; ) ; If a field is bound to a local definition of the same name, this shorthand can be used
+struct-punning-test = %(
+    a-text, ; instead of `a-text = a-text`
+    a-number, ; instead of `a-number = a-number`
+) ; If a field is bound to a local definition of the same name, this shorthand can be used
 
 struct-update-test = %(
-    ; ...struct-punning-test, ; must be the first item
-    a-text = "Something else" ; overriding this field
+    a-text = "Something else", ; overriding this field
+    ...struct-punning-test, ; must be the last item
 ) ; You can construct a new instance of a struct with some fields changed with this easy syntax.
 
 list-test-one = [ 1 ] ; List are ordered, iterable collections of items of the same type.
@@ -51,7 +51,7 @@ list-test-two = [
 list-spread-test-one = [
     "I",
     "contain",
-    ; ...list-test-two ; must be in the last position
+    ...list-test-two ; must be in the last position
 ] ; You can place another list as the cons of a new list with this syntax
 
 map-test-one = %[ "foo" = "bar" ] ; Maps are hashtables of the form `KEY = VALUE` where both KEY and VALUE can each be of one type
@@ -74,7 +74,7 @@ map-test-four = %[
 
 map-spread-syntax = %[
     "three" = 3,
-    ; ...map-test-four ; must be last item
+    ...map-test-four ; must be last item
 ] ; Maps can also be created with new (or updated) items with this syntax
 
 expression-list-test-one = ; expression list are like blocks, a series of local bindings ending in a value
@@ -83,7 +83,31 @@ expression-list-test-one = ; expression list are like blocks, a series of local 
     tuple-three = ( 3, 0 )
     [ tuple-one, tuple-two, tuple-three ] ; Last expression is value of binding
 
-; 
+
+
 ; ;; class tuples and class structs?
 ;; #ok("Some value") ; equivalent to `( #ok, "Some value" )`
 ;; %Weapon(health = 100, hit-power = 32.0) ; no direct equivalent 
+match-test(arg-one) =
+    arg-one ?
+    | 1 -> #one
+    | "Two" -> #two
+    | #Three -> #three
+    | ( 4, _ ) -> #four
+    | %( Five = 5,  ...other ) -> #five
+    | [ 1, 2, _, 4, 5, ...six ] ->
+        a = 1
+        #six
+    | %[ "Seven" = 7, ...others ] -> #seven
+
+
+pipe-test(arg) =
+    arg
+    > fn(23)
+
+named-app-test(arg) =
+    some-func(
+        arg-two = 32,
+        other-arg = #hello,
+        arg
+    )

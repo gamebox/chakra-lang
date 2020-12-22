@@ -1,0 +1,61 @@
+= %(
+    foo,
+)
+
+
+match-test(arg-one) =
+    arg-one ?
+    | 1 -> #one
+    | "Two" -> #two
+    | #Three -> #three
+    | ( 4, _ ) -> #four
+    | %( Five = 5,  ...other ) -> #five
+    | [ 1, 2, _, 4, 5, ...six ] ->
+        a = 1
+        #six
+    | %[ "Seven" = 7, ...others ] -> #seven
+
+
+;; arg-one :: num
+1 = arg-one
+;; arg-one :: str
+"Two" = arg-one
+;; arg-one :: lit (ChakraSymbol "Three")
+#Three = arg-one
+;; arg-one :: tup (num, unknown)
+(4, _) = arg-one
+;; arg-two :: %( Five = num, ...)
+;; other :: %( ...)
+%(Five = 5, ...other) = arg-two
+;; arg-two :: list num
+;; six :: list num
+[1, 2, _, 4, 5, ...six] = arg-two
+;; arg-two :: map (string, num)
+;; others = map (string, num)
+%["Seven" = 7, ...others] = arg-two
+
+increment-child(result) =
+    ;; result :: tup [lit ChakraSymbol "ok", strct [(label, unknown), (children, unknown)]]
+    ;; l :: unknown
+    ;; c :: unknown
+    (
+        #ok,
+        %(
+            label = l,
+            children = c,
+        )
+    ) = result
+    ;; ... later on ...
+    ;; c :: list unknown
+    ;; h :: unknown
+    ;; tail :: list unknown
+    [h, ...tail] = c
+    ;; Because add :: (num, num) -> num
+    ;; h :: struct [("label", num)]
+    ;; tail :: list (struct [("label", num)])
+    ;; c :: list (struct [("label", num)])
+    ;; result :: tup [lit ChakraSymbol "ok", strct [("label", num), ("children", list (struct [("label", num)]))]]
+    add(h.label, 4)
+    ;; Expr list type :: num
+    ;; increment-child :: (tup [lit ChakraSymbol "ok", strct [("label", num), ("children", list (struct [("label", num)]))]])) -> num
+    ;; or in display type :: ((#ok, %( label = num, children = [%(label = num)]))) -> num

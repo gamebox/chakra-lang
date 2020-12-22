@@ -165,7 +165,8 @@ let resultString result =
     | Failure (label, error, parserPos) ->
         createDiagnosticLine parserPos label error
 
-let printResult result = printfn "%s" (resultString result)
+let printResult result =
+    printfn "%s" (CConsole.red (resultString result))
 
 (*ParserResult
 ** Running

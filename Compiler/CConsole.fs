@@ -1,4 +1,4 @@
-module Console
+module CConsole
 
 let private csi = "\e["
 
