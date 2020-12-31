@@ -1,21 +1,23 @@
 /*
-* A hashtable implementation for storing references to Actor instances currently running on a process.
-*/
+ * A hashtable implementation for storing references to Actor instances
+ * currently running on a process.
+ */
 #include <stdlib.h>
+
 #include "actors.h"
 
-#ifndef __CHAKRA_RUN_TABLE_H
-#define __CHAKRA_RUN_TABLE_H
+#ifndef CHAKRA_RUN_TABLE_H
+#define CHAKRA_RUN_TABLE_H
 
 typedef struct ActorList {
-    running_actor_t *actor;
-    struct ActorList *next;
+  running_actor_t *actor;
+  struct ActorList *next;
 } actor_list_t;
 
 typedef struct RunTable {
-    size_t size;
-    size_t num_entries;
-    actor_list_t *entries;
+  size_t size;
+  size_t num_entries;
+  actor_list_t *entries;
 } run_table_t;
 
 run_table_t *run_table_new();

@@ -4,18 +4,17 @@ const int INTITAL_RC_SIZE = 1000;
 const int INC_DEC_BUFFER_SIZE = 1000;
 
 typedef struct RefCount {
-    void* ptr;
-    int count;
+  void* ptr;
+  int count;
 } RefCount;
 
-struct RefCount **RC;
+struct RefCount** RC;
 int RCIndex;
 
-void **Inc;
-void **Dec;
+void** Inc;
+void** Dec;
 int IncIndex;
 int DecIndex;
-
 
 void Init();
 void ChangeRefCount(void* P, int offset);
@@ -34,59 +33,53 @@ void ProcessDecrements();
 void DecrementStack();
 void Release(void* S);
 
-void** children(void* S) {
-    return NULL;
-}
+void** children(void* S) { return NULL; }
 
 void Init() {
-    RC = (struct RefCount**) malloc(sizeof(RefCount) * INTITAL_RC_SIZE);
-    Inc = (void**) malloc(sizeof(int) * INC_DEC_BUFFER_SIZE);
-    Dec = (void**) malloc(sizeof(int) * INC_DEC_BUFFER_SIZE);
-    if (RC == NULL || Inc == NULL || Dec == NULL) {
-        exit(1);
-    }
+  RC = (struct RefCount**)malloc(sizeof(RefCount) * INTITAL_RC_SIZE);
+  Inc = (void**)malloc(sizeof(int) * INC_DEC_BUFFER_SIZE);
+  Dec = (void**)malloc(sizeof(int) * INC_DEC_BUFFER_SIZE);
+  if (RC == NULL || Inc == NULL || Dec == NULL) {
+    exit(1);
+  }
 
-    IncIndex = 0;
-    DecIndex = 0;
+  IncIndex = 0;
+  DecIndex = 0;
 }
 
 void ChangeRefCount(void* P, int offset) {
-    int i = 0;
-    struct RefCount *rc;
-    while (RC[i] != NULL) {
-        rc = RC[i];
-        if (rc->ptr == P) {
-            rc->count++;
-            return;
-        }
-        i++;
+  int i = 0;
+  struct RefCount* rc;
+  while (RC[i] != NULL) {
+    rc = RC[i];
+    if (rc->ptr == P) {
+      rc->count++;
+      return;
     }
+    i++;
+  }
 }
 
 // Increment(S)
 //     RC(S) = RC(S) + 1
-void Increment(void* S) {
-    ChangeRefCount(S, 1);
-}
+void Increment(void* S) { ChangeRefCount(S, 1); }
 
 // Decrement(S)
 //     RC(S) = RC(S) - 1
 //     if (RC(S) == 0)
 //         Release(S)
-void Decrement(void* S) {
-    ChangeRefCount(S, -1);
-}
+void Decrement(void* S) { ChangeRefCount(S, -1); }
 
 // Release(S)
 //     for T in children(S)
 //         Decrement(T)
 //     SystemFree(S)
 void Release(void* S) {
-    void** cs = children(S);
-    for (int i = 0; i < sizeof cs; i = i + 1) {
-        Decrement(cs[i]);
-    }
-    free(S);
+  void** cs = children(S);
+  for (int i = 0; i < sizeof cs; i = i + 1) {
+    Decrement(cs[i]);
+  }
+  free(S);
 }
 
 // Update(R, S)
@@ -96,14 +89,14 @@ void Release(void* S) {
 //     if (T != null)
 //         EnqueueDecrement(T)
 void Update(void* R, void* S) {
-    void *T = R;
-    R = S;
-    if (S != NULL) {
-        EnqueueIncrement(S);
-    }
-    if (T != NULL) {
-        EnqueueDecrement(T);
-    }
+  void* T = R;
+  R = S;
+  if (S != NULL) {
+    EnqueueIncrement(S);
+  }
+  if (T != NULL) {
+    EnqueueDecrement(T);
+  }
 }
 
 // Allocate(n)
@@ -117,18 +110,17 @@ void Update(void* R, void* S) {
 //     EnqueueDecrement(P)
 //     return P
 void* Allocate(int n) {
-    void* P = malloc(n);
+  void* P = malloc(n);
+  if (P == NULL) {
+    Collect();
+    P = malloc(n);
     if (P == NULL) {
-        Collect();
-        P = malloc(n);
-        if (P == NULL) {
-            exit(1);
-        }
+      exit(1);
     }
+  }
 
-    
-    EnqueueDecrement(P);
-    return P;
+  EnqueueDecrement(P);
+  return P;
 }
 
 // EnqueueIncrement(S)
@@ -136,11 +128,11 @@ void* Allocate(int n) {
 //         Collect()
 //     append S to Inc
 void EnqueueIncrement(void* S) {
-    if (IncIndex == sizeof Inc) {
-        Collect();
-    }
-    Inc[IncIndex] = S;
-    IncIndex++;
+  if (IncIndex == sizeof Inc) {
+    Collect();
+  }
+  Inc[IncIndex] = S;
+  IncIndex++;
 }
 
 // EnqueueDecrement(S)
@@ -148,11 +140,11 @@ void EnqueueIncrement(void* S) {
 //         Collect()
 //     append S to Dec
 void EnqueueDecrement(void* S) {
-    if (DecIndex == sizeof Dec) {
-        Collect();
-    }
-    Dec[DecIndex] = S;
-    DecIndex++;
+  if (DecIndex == sizeof Dec) {
+    Collect();
+  }
+  Dec[DecIndex] = S;
+  DecIndex++;
 }
 
 // Collect()
@@ -166,10 +158,10 @@ void EnqueueDecrement(void* S) {
 //     for T in Threads
 //         Resume(T)
 void Collect() {
-    IncrementStack();
-    ProcessIncrements();
-    ProcessDecrements();
-    DecrementStack();
+  IncrementStack();
+  ProcessIncrements();
+  ProcessDecrements();
+  DecrementStack();
 }
 
 // IncrementStack()
@@ -183,11 +175,11 @@ void IncrementStack() {}
 //         Increment(M)
 //     clear Inc
 void ProcessIncrements() {
-    for (int i = 0; i < IncIndex; i = i + 1) {
-        Increment(Inc[i]);
-        Inc[i] = NULL;
-    }
-    IncIndex = 0;
+  for (int i = 0; i < IncIndex; i = i + 1) {
+    Increment(Inc[i]);
+    Inc[i] = NULL;
+  }
+  IncIndex = 0;
 }
 
 // ProcessDecrements()
@@ -195,11 +187,11 @@ void ProcessIncrements() {
 //         Decrement(M)
 //     clear Dec
 void ProcessDecrements() {
-    for (int i = 0; i < DecIndex; i = i + 1) {
-        Decrement(Dec[i]);
-        Dec[i] = NULL;
-    }
-    DecIndex = 0;
+  for (int i = 0; i < DecIndex; i = i + 1) {
+    Decrement(Dec[i]);
+    Dec[i] = NULL;
+  }
+  DecIndex = 0;
 }
 
 // DecrementStack()

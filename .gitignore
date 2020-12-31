@@ -256,3 +256,11 @@ MyProject_coverage.xml
 
 .fake
 .ionide
+
+########################## RUNTIME
+
+Runtime/*.s
+Runtime/*.a
+Runtime/*.out
+Runtime/*.gch
+Runtime/*.ll

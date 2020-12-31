@@ -1,43 +1,46 @@
 /*
-* Types related to Actors
-*/
+ * Types related to Actors
+ */
+#ifndef CHAKRA_ACTORS_H
+#define CHAKRA_ACTORS_H
+
 #include <stdlib.h>
 
-#ifndef __CHAKRA_ACTORS_H
-#define __CHAKRA_ACTORS_H
 typedef struct ActorId {
-    size_t process;
-    size_t entity;
+  size_t process;
+  size_t entity;
 } actor_id_t;
 
 typedef struct Msg {
-    char *type;
-    void *payload;
+  char *type;
+  void *payload;
 } msg_t;
 
 typedef struct Envelope {
-    actor_id_t actor_id;
-    msg_t msg;
+  actor_id_t actor_id;
+  msg_t msg;
 } envelope_t;
 
+typedef struct List__Envelope_t {
+  envelope_t item;
+  struct List__Envelope_t *next;
+} list__envelope_t;
+
 typedef struct TurnResult {
-    void *state;
-    envelope_t *envelopes;
-    size_t num_msgs;
+  void *state;
+  list__envelope_t *envelopes;
 } turn_result_t;
 
 typedef struct Actor {
-    turn_result_t* (*init)(void **args);
-    turn_result_t* (*receive)(void *state, msg_t *msg);
+  turn_result_t *(*init)(void **args);
+  turn_result_t *(*receive)(void *state, msg_t *msg);
 } actor_t;
 
-
 typedef struct RunningActor {
-    actor_id_t id;
-    actor_t *def;
-    void *state;
+  actor_id_t id;
+  actor_t *def;
+  void *state;
 } running_actor_t;
-
 
 int actor_id_cmp(actor_id_t a, actor_id_t b);
 
