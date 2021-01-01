@@ -1,4 +1,7 @@
+#include <string.h>
+
 #include "actors.h"
+#include "process.h"
 #include "run_table.h"
 
 void child_process(int id) {

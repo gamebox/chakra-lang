@@ -1,8 +1,10 @@
 #include "main.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "actors.h"
+#include "stdlib.h"
 
 /* main.chakra
 = %( init )
@@ -61,42 +63,18 @@ receive(state, msg) =
 
 typedef struct DISCRIMINATOR {
   long tag;
-};
+} DISCRIMINATOR_t;
 
 typedef struct Main_Actor__State_STARTED {
   long tag;
   actor_id_t stdio;
-};
+} Main_Actor__State_STARTED_t;
 
 typedef struct Main_Actor__State_BOOTED {
   long tag;
   actor_id_t stdio;
   actor_id_t other;
-};
-
-envelope_t Chakra_stdlib__print(actor_id_t process_id, char *text) {
-  envelope_t env = {.actor_id = process_id,
-                    .msg = {.type = "PRINT", .payload = (void *)text}};
-
-  return env;
-};
-
-envelope_t Chakra_stdlib__kill(actor_id_t process_id) {
-  actor_id_t *id = (actor_id_t *)malloc(sizeof(actor_id_t));
-  *id =
-      (actor_id_t){.entity = process_id.entity, .process = process_id.process};
-  envelope_t env = {.actor_id = {.entity = 0, .process = process_id.process},
-                    .msg = {.type = "KILL", .payload = (void *)id}};
-
-  return env;
-};
-
-envelope_t Chakra_stdlib__spawn(actor_id_t process_id, actor_t *actor) {
-  envelope_t env = {.actor_id = process_id,
-                    .msg = {.type = "SPAWN", .payload = (void *)actor}};
-
-  return env;
-};
+} Main_Actor__State_BOOTED_t;
 
 turn_result_t *Main_Actor__init(void **args) {
   actor_id_t *process_id = (actor_id_t *)args[0];
@@ -117,11 +95,10 @@ turn_result_t *Main_Actor__receive(void *state, msg_t *msg) {
   //   ( state, msg ) ?
   // | ( %Booted( state, ...),  ( "CURRENT", 100) ) ->
   struct DISCRIMINATOR *d = (struct DISCRIMINATOR *)state;
-  int *n = (int *)msg->payload;
   turn_result_t *res = malloc(sizeof(turn_result_t));
 
   if (d->tag == 1 && strcmp(msg->type, "CURRENT") == 0 &&
-      *n == 100) {  // %Booted( stdio, other )
+      *((int *)msg->payload) == 100) {  // %Booted( stdio, other )
     //     (
     //         state,
     //         [
@@ -130,7 +107,25 @@ turn_result_t *Main_Actor__receive(void *state, msg_t *msg) {
     //             kill(self())
     //         ]
     //     )
-    }
+    Main_Actor__State_BOOTED_t *s = (Main_Actor__State_BOOTED_t *)state;
+    list__envelope_t *env2 =
+        (list__envelope_t *)malloc(sizeof(list__envelope_t));
+    *env2 = (list__envelope_t){
+        .item = Chakra_stdlib__kill(Chakra_stdlib__self()), .next = NULL};
+    list__envelope_t *env1 =
+        (list__envelope_t *)malloc(sizeof(list__envelope_t));
+    *env1 =
+        (list__envelope_t){.item = Chakra_stdlib__kill(s->other), .next = env2};
+    list__envelope_t *envs =
+        (list__envelope_t *)malloc(sizeof(list__envelope_t));
+    *envs = (list__envelope_t){
+        .item = Chakra_stdlib__print(s->stdio, "All done"), .next = env1};
+
+    res->state = state;
+    res->envelopes = envs;
+
+    return res;
+  }
   // | ( %Booted( state, ...), ( "CURRENT", n ) ) ->
   if (d->tag == 1 &&
       strcmp(msg->type, "CURRENT") == 0) {  // %Booted( stdio, other )
@@ -138,14 +133,37 @@ turn_result_t *Main_Actor__receive(void *state, msg_t *msg) {
     //         state,
     //         [
     //             print(state.stdio, join("Got ", from-num(n))),
-    //             timeout("WAKE")
+    //             timeout(1000, "WAKE")
     //         ]
     //     )
+    Main_Actor__State_BOOTED_t *s = (Main_Actor__State_BOOTED_t *)state;
+    list__envelope_t *env1 =
+        (list__envelope_t *)malloc(sizeof(list__envelope_t));
+    *env1 = (list__envelope_t){
+        .item = Chakra_stdlib__timeout(1000, (void *)"WAKE"), .next = NULL};
+    list__envelope_t *envs =
+        (list__envelope_t *)malloc(sizeof(list__envelope_t));
+    char text[100];
+    int *n = (int *)msg->payload;
+    sprintf(text, "Got %d", *n);
+    *envs = (list__envelope_t){.item = Chakra_stdlib__print(s->stdio, text),
+                               .next = env1};
+    res->state = state;
+    res->envelopes = envs;
+    return res;
   }
   // | ( %Booted( state, ...), "WAKE" ) ->
   if (d->tag == 1 &&
       strcmp(msg->type, "WAKE") == 0) {  // %Booted( stdio, other )
     //     ( state, [ send(state.other, "INC") ] )
+    Main_Actor__State_BOOTED_t *s = (Main_Actor__State_BOOTED_t *)state;
+    list__envelope_t *envs =
+        (list__envelope_t *)malloc(sizeof(list__envelope_t));
+    *envs = (list__envelope_t){
+        .item = Chakra_stdlib__send(s->other, (void *)"INC"), .next = NULL};
+    res->state = state;
+    res->envelopes = envs;
+    return res;
   }
   // | ( %Started( stdio, ...), ( "SPAWNED", other ) ) ->
   if (d->tag == 0 && strcmp(msg->type, "SPAWNED") == 0) {
@@ -187,10 +205,10 @@ init(initial) =
 
 receive(state, msg) =
     (state, msg) ?
-    | (_, "INC") -> %( 0 + 1, [] )
-    | (_, "DEC") -> %( 0 - 1, [] )
+    | (_, "INC") -> ( 0 + 1, [] )
+    | (_, "DEC") -> ( 0 - 1, [] )
     | (_, ("TELL", to, msg-type)) ->
-        %(
+        (
             state,
             [
                 send(to, ( msg-type, state ))

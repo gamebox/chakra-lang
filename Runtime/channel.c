@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "process.h"
+
 void channel_pair_new(channel_t *pair) {
   int fd1[2];  // Used to store two ends of first pipe
   int fd2[2];  // Used to store two ends of second pipe
