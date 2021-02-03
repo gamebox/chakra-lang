@@ -33,3 +33,4 @@ let private color code = sprintf "\x1b[%im" code
 let private withColor code n = sprintf "%s%s%s" (color code) n (color reset)
 
 let red n = withColor redFg n
+let green n = withColor greenFg n

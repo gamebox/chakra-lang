@@ -6,8 +6,7 @@ typedef struct Channel {
   int write_fd;
 } channel_t;
 
-void channel_pair_new(channel_t *pair);
 channel_t *channel_new();
-int channel_close(channel_t c);
+int channel_close(channel_t *c);
 
 #endif

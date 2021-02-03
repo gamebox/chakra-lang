@@ -2,6 +2,7 @@
 
 #if __linux__
 #include <sys/sysinfo.h>
+#include <sched.h>
 #endif
 
 #if __MACH__
@@ -12,7 +13,5 @@ typedef struct cpu_set {
 
 #endif
 
-int set_cpu_affinity(pid_t pid, size_t size, cpu_set_t *mask);
-void CPU_ZERO(cpu_set_t *mask);
-void CPU_SET(int cpu, cpu_set_t *mask);
+int set_cpu_affinity(pthread_t pid, int cpu);
 int get_nprocs();

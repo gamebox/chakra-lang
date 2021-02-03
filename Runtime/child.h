@@ -1,6 +1,8 @@
 #ifndef CHAKRA_CHILD_H
 #define CHAKRA_CHILD_H
 
-void child_process(int id);
+#include "process.h"
+
+void* child_process(void *arg);
 
 #endif

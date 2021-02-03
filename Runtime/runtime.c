@@ -1,10 +1,13 @@
 #define _GNU_SOURCE
 #include <errno.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#if __MACH__
 #include <sys/proc.h>
 #include <sys/proc_info.h>
+#endif
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -16,81 +19,68 @@
 #include "process.h"
 #include "run_table.h"
 #include "sched.h"
-
-int assignToCore(pid_t pid, int cpu) {
-  cpu_set_t mask;
-
-  CPU_ZERO(&mask);
-  CPU_SET(cpu, &mask);
-  int result = set_cpu_affinity(pid, sizeof(mask), &mask);
-
-  return result;
-}
+#include "stdlib.h"
 
 int main() {
-  puts("CP 1");
-  pid_t processes[32];
-  channel_t channel_pairs[32];
-
   int nprocs = get_nprocs();
-  puts("CP 2");
+  int process_id = 0;
 
-  process_coms = malloc(sizeof(channel_t *) * nprocs);
-
-  process_coms[0] = channel_new();
-  printf("NPROCS %d\n", nprocs);
-  puts("CP 3");
+  coms = process_coms_new(nprocs + 1);
+  process_coms_display();
+  actor_id_t self = {.process = 0, .entity = 0};
 
   for (int i = 1; i < nprocs; i++) {
-    puts("CP 4");
-    process_coms[i] = channel_new();
-  }
-  for (int i = 1; i < nprocs; i++) {
-    pid_t p = fork();
-
-    if (p < 0) {  // Fork failure
-      fprintf(stderr, "fork Failed");
-      return 1;
-    }
-
-    if (p > 0) {
-      processes[i] = p;
-      int assignmentResult = assignToCore(p, i + 1);
-      if (assignmentResult < 0) {
-        break;
-      }
-    }
-
-    if (p == 0) {
-      child_process(i);
-      return 0;
+    pthread_t thread_id;
+    int *id = (int *)malloc(sizeof(int));
+    *id = i;
+    pthread_create(&thread_id, NULL, child_process, (void *)id);
+    int assignmentResult = set_cpu_affinity(thread_id, i + 1);
+    if (assignmentResult < 0) {
+      break;
     }
   }
 
   // Start main actor on first child
 
-  msg_t msg = (msg_t){.type = "SPAWN", .payload = (void *)&MainActor};
-  envelope_t *env = (envelope_t *)malloc(sizeof(envelope_t));
-  *env = (envelope_t){.msg = msg, .actor_id = {.process = 1, .entity = 0}};
+  void **args = (void **)malloc(sizeof(void *));
+  actor_id_t *actor_id = (actor_id_t *)malloc(sizeof(actor_id_t));
+  *actor_id = (actor_id_t){.process = 2, .entity = 0};
+  args[0] = (void *)actor_id;
+  // printf("MainActor->init @ <%p><%p>\n", &MainActor, &(MainActor.init));
+  envelope_t *env = Chakra_stdlib__spawn1(&MainActor, (void *)actor_id);
+  env->actor_id = *actor_id;
 
-  process_write(*env);
+  int writeResult = process_write(*env);
 
-  puts("WROTE SPAWN");
+  // printf("WROTE SPAWN? %d\n", writeResult);
 
   while (1) {
-    int readResult = process_read(0, env, 0);
+    int readResult = process_read(env, 0);
 
     if (readResult == -1) {
       break;
     }
 
+    if (readResult == 0) {
+      continue;
+    }
+
     if (env != NULL) {
+      // printf("PARENT MSG RECEIVED: `%s`\n", env->msg.type);
       if (strcmp(env->msg.type, "PRINT") == 0) {
         char *text = (char *)env->msg.payload;
         puts(text);
       }
+
+      if (strcmp(env->msg.type, "TIMEOUT") == 0) {
+        timeout_command_t *cmd = (timeout_command_t *)env->msg.payload;
+        // printf("SHOULD BE SENT AFTER A %d timeout\n", cmd->timeout_ms);
+        int writeResult = process_write(*cmd->env);
+      }
     }
   }
+
+  process_coms_close();
 
   return 0;
 }

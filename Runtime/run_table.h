@@ -17,7 +17,7 @@ typedef struct ActorList {
 typedef struct RunTable {
   size_t size;
   size_t num_entries;
-  actor_list_t *entries;
+  actor_list_t **entries;
 } run_table_t;
 
 run_table_t *run_table_new();

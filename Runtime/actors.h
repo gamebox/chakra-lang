@@ -22,7 +22,7 @@ typedef struct Envelope {
 } envelope_t;
 
 typedef struct List__Envelope_t {
-  envelope_t item;
+  envelope_t *item;
   struct List__Envelope_t *next;
 } list__envelope_t;
 
@@ -42,6 +42,14 @@ typedef struct RunningActor {
   void *state;
 } running_actor_t;
 
+typedef struct SpawnRequest {
+  actor_id_t spawnee;
+  actor_t *def;
+  int num_init_args;
+  void **init_args;
+} spawn_request_t;
+
+void actor_id_display(actor_id_t *a);
 int actor_id_cmp(actor_id_t a, actor_id_t b);
 
 #endif

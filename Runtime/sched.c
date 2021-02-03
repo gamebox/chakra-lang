@@ -1,14 +1,18 @@
-#include <stdlib.h>
-
 #ifndef CHAKRA_SCHED_H
 #define CHAKRA_SCHED_H
 
 #if __linux__
+#define _GNU_SOURCE
 
-#include <sys/sysinfo.h>
+#include <pthread.h>
+#include <sched.h>
 
-int set_cpu_affinity(pid_t pid, size_t size, cpu_set_t *mask) {
-  int res = sched_setaffinity(pid, size, mask);
+int set_cpu_affinity(pthread_t pid, int cpu) {
+  cpu_set_t mask;
+
+  CPU_ZERO(&mask);
+  CPU_SET(cpu, &mask);
+  int res = pthread_setaffinity_np(pid, sizeof(mask), &mask);
   return res;
 }
 
@@ -16,6 +20,7 @@ int set_cpu_affinity(pid_t pid, size_t size, cpu_set_t *mask) {
 
 #if __MACH__
 
+#include <stdlib.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
 
@@ -25,7 +30,7 @@ typedef struct cpu_set {
   uint32_t count;
 } cpu_set_t;
 
-int set_cpu_affinity(pid_t pid, size_t size, cpu_set_t *mask) { return 0; }
+int set_cpu_affinity(pid_t pid, int cpu) { return 0; }
 void CPU_ZERO(cpu_set_t *mask) { mask->count = 0; }
 
 void CPU_SET(int cpu, cpu_set_t *mask) { mask->count |= 1 << cpu; }

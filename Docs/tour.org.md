@@ -105,7 +105,7 @@ context, but it has other uses that will be explained later.
 
 A Pattern Sub-Form is of the following form
 
-    | /pattern/ [; /guard/ ]-> /expression/|/expression-list/
+    | /pattern/ [: /guard/ ]-> /expression/|/expression-list/
 
 Where an expression list must appear, indented, on the following line. A
 pattern is similar in form to literals, but allows symbols to be
@@ -132,7 +132,7 @@ found.
 Functions in Chakra are applied in a very straightforward way which may
 look conventional at first glance.
 
-`some-fn(arg-one arg-two [more-args])`
+`some-fn(arg-one, arg-two, [more-args])`
 
 But this belies some of the beauty of application in Chakra. Chakra also
 supports *named application* and *partial application*, and these can
@@ -145,11 +145,11 @@ Assume a function defined as:
 
 Calling this function can have all the following forms:
 
-`some-fn(22 10)`
+`some-fn(22, 10)`
 
-`some-fn(num-twinkies = 22 num-hohos = 10)`
+`some-fn(num-twinkies = 22, num-hohos = 10)`
 
-`some-fn(num-hohos = 10 num-twinkies = 22)`
+`some-fn(num-hohos = 10, num-twinkies = 22)`
 
 Notice that named application looks like a struct literal, and that
 positional application looks like a tuple literal, and that\'s exactly
@@ -163,7 +163,7 @@ not been fulfilled.
 
 It looks like this:
 
-`some-fn(22 ...)`
+`some-fn(22, ...)`
 
 [DONE]{.done .DONE} Primitive Types {#primitive-types}
 ===================================
@@ -312,12 +312,12 @@ be iterated on. Their values are accessed through pattern matching or
 Numbered field access looks like this:
 
 ``` {.chakra}
-some-tup = (1 2)
-some-int = some-tup.1
+some-tup = (1, 2)
+some-int = some-tup.1 ; Not supported yet
 ```
 
 Functions for working with tuples in the prelude include `tuple?` and
-`length`
+`size`
 
 ### [DONE]{.done .DONE} Struct {#struct}
 
@@ -325,14 +325,14 @@ Structs compiled down to the same data structure as tuples, but allow
 fields to be explicitly named. This is useful for documenting intent.
 This is a struct\'s literal form:
 
-`(field-one = 1 field-two = 2)`
+`%(field-one = 1, field-two = 2)`
 
 It is typical and idiomatic to write struct literals with multiple
 fields on multiple lines like so:
 
 ``` {.chakra}
-some-struct = (
-  field-one = 1
+some-struct = %(
+  field-one = 1,
   field-two = 2
 )
 ```
@@ -354,7 +354,7 @@ to the head. It has the simplest implementation of the `seq` interface.
 
 The list has the following literal form:
 
-`[1 2 3 4]`
+`[1, 2, 3, 4]`
 
 List functions abound: `head`, `tail`, `drop`, `take`, `map`, `filter`,
 `reduce`, `add`, `length` and more. Most list functions are part of the
@@ -368,27 +368,22 @@ associative semantics for sparse data.
 
 The set has the following literal form:
 
-`{'a = 1 'b = 2}`
+`%['a = 1, 'b = 2]`
 
 Keys and values can be of any type, but keys and values not of the same
 type lead to a complex typing and worse performance characteristics.
 
 Map implements the `seq` and `collection` interfaces, like list, but the
 signatures for these functions use a key-value tuple for the element.
-They also implements the `assoc` interface, which provides the `keys`
-and `values` functions. The `apply` interface allows for them to be
-called directly as functions.
+They also implement the `assoc` interface, which provides the `keys`
+and `values` functions.
 
 ### [DONE]{.done .DONE} Set {#set}
 
 The Set is actually semantic sugar for a Hash Map where the keys are
 always bound to a singleton value `'present`.
 
-The set has the following literal form:
-
-`{1 2 3}`
-
-Notice the lack of `=` above. Sorted sequences of sets are available
+Sorted sequences of sets are available
 with the `sort` function. Like maps, the types of the values should be
 the same, but may be different if you are willing to take a performance
 hit.
@@ -396,21 +391,6 @@ hit.
 Sets also implement `collection` so `drop`, `take`, `map`, `filter`,
 `reduce`, `contains?`, `empty?` etc. are available.
 
-### [DONE]{.done .DONE} Vector {#vector}
-
-The Vector is similar to a conventional array, expect for the immutable
-and peristent attributes common to all containers in Chakra. The allows
-O(1) access and easy sequential access. Best for non-associative, dense
-data that is homogeneous. Always grows at the end.
-
-The Vector has the following literal form:
-
-`{1 2 3}`
-
-Arrays implement `collection` natively, as well as `apply`, for direct
-application (Arrays are functions of an index to a value). The `vector`
-interface also allows for a very efficient `subvector` operation that
-returns a zero-copy window into a vector.
 
 [DONE]{.done .DONE} Functions {#functions}
 =============================
@@ -421,41 +401,15 @@ returns a zero-copy window into a vector.
 The simplest, least flexible way to define a function follows the form:
 
 ``` {.chakra}
-some-fn (a b) = ...
+some-fn(a, b) = ...
 ```
 
 This defines a straightforward binding of a function that can be applied
 with a two-element tuple. The types of these arguments is unclear
 without seeing the definition of the function.
 
-[DONE]{.done .DONE} Binding Syntax {#binding-syntax}
-----------------------------------
 
-This is the most common syntax you will see in Chakra.
-
-``` {.chakra}
-some-fn a b = ...
-```
-
-This syntax allows for multiple styles of function application. It can
-be applied partially, and applied positionally or by name - as long as
-the same style is used for each application. Partial application returns
-a function that can be applied with any arguments that have not been
-applied. Some examples:
-
-``` {.chakra}
-some-fn(1 2) -- normal, full application
-some-fn(1 ..) -- positional partial application
-some-fn(a = 1 b = 2) -- named full application
-some-fn(b = 2 ..) -- named partial application
-some-fn(b = 2 ..)(1) -- mixing applications
-some-fn(...) -- zero application, same as just the symbol itself
-```
-
-As you can see this is very flexible for a function that has a single
-head.
-
-[DONE]{.done .DONE} Multi-head {#multi-head}
+[DONE]{.done .DONE} Multi-head (?) {#multi-head}
 ------------------------------
 
 This style of function binding allows for different definitions to be
@@ -536,7 +490,7 @@ expression lists can not be used, only a simple reference to a member in
 the Tree. But a module can be destructed like so:
 
 ``` {.chakra}
-( some-fn ) = /root/lib/sublib/mod
+%( some-fn ) = /root/lib/sublib/mod
 ```
 
 [DONE]{.done .DONE} Files {#files}
