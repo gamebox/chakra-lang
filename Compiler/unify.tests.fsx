@@ -2,6 +2,7 @@
 #load "ParserLibrary.fs"
 #load "ChakraParser.fs"
 #load "Env.fs"
+#load "Pretty.fs"
 #load "Unify.fs"
 
 open Unify
@@ -51,21 +52,50 @@ let suite name tests =
     List.fold collectSuiteResults (0, []) tests
     |> printResults name
 
-let litTypeTestWithEnv env p str t () =
-    let (ParserLibrary.Success((lit, _))) = ParserLibrary.run p str
-    let msg = (sprintf "%s == %s" str (print t))
-    let (Ok (_, t')) = literalType env lit
-    if t' = t then
-        printfn "%s" (cGreen msg)
-        Ok ()
-    else
+let typeTestWithEnv prettier test' env p str t () =
+    match ParserLibrary.run p str with
+    | (ParserLibrary.Success((lit, _))) ->
+        let msg = (sprintf "%s == %s" (Pretty.pretty 80 (prettier lit)) (print t))
+        match test' env lit with
+        | (Ok (_, t')) ->
+            if t' = t then
+                printfn "%s" (cGreen msg)
+                Ok ()
+            else
+                printfn "%s" (cRed msg)
+                printfn "%s" (cRed (sprintf "Got: %s" (print t')))
+                Error msg
+        | Error (TypeError e) ->
+            printfn "%s" (cRed msg)
+            printfn "%s" (cRed (sprintf "Problem: %s" e))
+            Error msg
+    | (ParserLibrary.Failure _) ->
+        let msg = (sprintf "Failed to parse: %s" str)
         printfn "%s" (cRed msg)
-        printfn "%s" (cRed (sprintf "Got: %s" (print t')))
         Error msg
 
+let litTypeTestWithEnv env p str t () =
+    typeTestWithEnv Pretty.showLiteral literalType env p str t ()
 
 let litTypeTest p str t () =
     litTypeTestWithEnv defaultEnv p str t ()
+
+let exprTypeTestWithEnv env p str t () =
+    typeTestWithEnv Pretty.showExpr exprType env p str t ()
+
+let exprTypeTest p str t () =
+    exprTypeTestWithEnv defaultEnv p str t ()
+
+let bindingTypeTestWithEnv env p str t () =
+    typeTestWithEnv Pretty.showBinding bindingType env p str t ()
+
+let exprTestsEnv = emptyWith [
+    ("add", fn [ num; num ] num)
+    ("starts-with?", fn [ str; str ] bool)
+    ("gt?", fn [ num; num ] bool)
+    ("mul", fn [ num; num ] num)
+    ("map", fn [ fn [ genA ] genB; list genA ] genB)
+]
 
 suite "Unify" [
     test "unify" [
@@ -96,8 +126,36 @@ suite "Unify" [
         litTypeTest chakraList "[1, 2, 3]" (list num)
         litTypeTest chakraList "[\"a\", \"b\", \"c\"]" (list str)
         litTypeTest chakraTuple "(1, \"a\")" (tup [num; str])
+        litTypeTest chakraStruct "%( a = 1, b = \"foo\")" (strct ([("a", num); ("b", str)], false, None))
         litTypeTest chakraLambda "{ (a) ->\n\tb = 1\n\tc = \"a\"\n\t(b, c)\n}" (fn [] (tup [num; str]))
         litTypeTestWithEnv (emptyWith ["a", str]) chakraVar "a" str
         litTypeTestWithEnv (emptyWith ["a", str]) chakraTuple "(1, a)" (tup [num; str])
+    ]
+
+    test "exprType - successful" [
+        exprTypeTest chakraLiteralExpr "1" num
+        exprTypeTest chakraLiteralExpr "124252352342334" num
+        exprTypeTest chakraLiteralExpr "13.4645645645645666665" num
+        exprTypeTest chakraLiteralExpr "-13423423523525232432424241.092824024" num
+        exprTypeTest chakraLiteralExpr "\"\"" str
+        exprTypeTest chakraLiteralExpr "\"This is a string\"" str
+        exprTypeTest chakraLiteralExpr "#symbol" (gSym "symbol")
+        exprTypeTest chakraLiteralExpr "#symbol-That-I-Made" (gSym "symbol-That-I-Made")
+        exprTypeTest chakraLiteralExpr "[1, 2, 3]" (list num)
+        exprTypeTest chakraLiteralExpr "[\"a\", \"b\", \"c\"]" (list str)
+        exprTypeTest chakraLiteralExpr "(1, \"a\")" (tup [num; str])
+        exprTypeTest chakraLiteralExpr "%( a = 1, b = \"foo\")" (strct ([("a", num); ("b", str)], false, None))
+        exprTypeTest chakraLiteralExpr "{ (a) ->\n\tb = 1\n\tc = \"a\"\n\t(b, c)\n}" (fn [] (tup [num; str]))
+        exprTypeTestWithEnv (emptyWith ["a", str]) chakraLiteralExpr "a" str
+        exprTypeTestWithEnv (emptyWith ["a", str]) chakraLiteralExpr "(1, a)" (tup [num; str])
+        exprTypeTestWithEnv exprTestsEnv chakraApplyExpr "add(1, 1)" num
+        exprTypeTestWithEnv exprTestsEnv chakraApplyExpr "add(1)" (fn [num] num)
+        exprTypeTestWithEnv exprTestsEnv chakraApplyExpr "starts-with?(\"foo\", \"f\")" bool
+        exprTypeTestWithEnv exprTestsEnv chakraApplyExpr "map({ (i) -> add(i, 1)}, [1, 2, 3])" (list num)
+    ]
+
+    test "bindingType - successful" [
+        bindingTypeTestWithEnv exprTestsEnv chakraBinding "foo(a) =\n\tb = 1\n\tc = \"a\"\n\t(b, c)\n" (fn [genA] (tup [num; str]))
+        bindingTypeTestWithEnv exprTestsEnv chakraBinding "foo(a, b, c) =\n\tsum = add(a, b)\n\n\tproduct = mul(sum, c)\n\n\tgt?(product, 100)\n" (fn [num; num; num] bool)
     ]
 ]

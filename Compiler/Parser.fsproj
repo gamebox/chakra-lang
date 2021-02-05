@@ -10,9 +10,9 @@
     <Compile Include="ParserLibrary.fs" />
     <Compile Include="ChakraParser.fs" />
     <Compile Include="Env.fs" />
+    <Compile Include="Pretty.fs" />
     <Compile Include="Unify.fs" />
     <Compile Include="Command.fs" />
-    <Compile Include="Format.fs" />
     <Compile Include="Build.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

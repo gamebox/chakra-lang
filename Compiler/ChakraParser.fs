@@ -363,7 +363,7 @@ let pBaseIdentifier =
 
 let pVar =
     pBaseIdentifier
-    .>>. opt (many (pchar '.' >>. pBaseIdentifier))
+    .>>. opt (many1 (pchar '.' >>. pBaseIdentifier))
 
 let chakraVar =
     pVar
@@ -775,9 +775,7 @@ let chakraBindingPattern =
 
     let func =
         pBaseIdentifier
-        .>> leftParen
-        .>>. sepBy pBaseIdentifier containerItemSeparator
-        .>> rightParen
+        .>>. container leftParen rightParen pBaseIdentifier
         |>> fun (name, args) -> ChakraFunctionBindingPattern { Name = name; Args = args }
         <?> "function binding pattern"
 
@@ -795,7 +793,8 @@ let rec chakraBinding =
           ExprList = e
           DocComment = None}
 
-    (chakraBindingPattern .>> equal)
+    chakraBindingPattern
+    .>> equal
     .>>. chakraExprList
     |> withSpan
     |>> createBinding

@@ -2,7 +2,7 @@
     This is an adaptation of Phillip Wadler's "A Prettier Printer" algorithm
     Original document can be found at: http://homepages.inf.ed.ac.uk/wadler/papers/prettier/prettier.pdf
 *)
-module Format
+module Pretty
 
 open ChakraParser
 open System.Text.RegularExpressions

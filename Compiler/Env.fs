@@ -194,3 +194,18 @@ let mergeAs (prefix) env =
 
         { Current = { Bindings = newC; Generic = c.Generic }
           Rest = r }
+
+let updateBinding (string, typ) { Current = c; Rest = r }: Env =
+    if c.Bindings.ContainsKey(string) then
+        { Current = 
+            { Bindings = Map.add string typ c.Bindings
+              Generic = c.Generic }
+          Rest = r }
+    else
+        match List.tryFindIndex (fun frame -> Map.containsKey string frame.Bindings) r with
+        | Some i ->
+            let newF = { Bindings = Map.add string typ (List.item i r).Bindings ; Generic = c.Generic}
+            { Current = c
+              Rest = List.concat [List.take i r ; [newF]; List.skip (i + 1) r]}
+        | None ->
+            { Current = c; Rest = r }

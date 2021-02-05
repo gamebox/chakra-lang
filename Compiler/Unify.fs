@@ -19,8 +19,8 @@ let rec print typ =
         | GlobalSymbol s -> sprintf "#%s" s
         | ModuleSymbol (m, s) -> sprintf "#%s/%s" m s
 
-    | LiteralType literal -> "literal"
-
+    | LiteralType literal -> 
+        Pretty.pretty 80 (Pretty.showLiteral literal)
     | TupleType types ->
         let typeList = List.map print types
         sprintf "( %s )" (typeList |> String.concat ", ")
@@ -56,92 +56,6 @@ let rec print typ =
     | PolymorphicType t -> sprintf "@%s" t
 
     | RefType t -> sprintf "&%s" (print t)
-
-// let gatherTypes acc item =
-//     if List.contains item acc then acc else item :: acc
-
-// let typeListToType types =
-//     if List.length types = 1 then List.head types else UnionType(List.sort types)
-
-// let rec exprType (env: Env) expr =
-//     match expr with
-//     | ChakraLiteralExpr (_, literal) -> literalType env literal
-//     | ChakraApplyExpr (_, (ChakraApply ((ident, _), exprs))) ->
-//         let fType = Option.defaultValue UnknownType (getTypeForBinding ident env)
-//         match fType with
-//         | FunctionType (_, t) -> t
-//         | _ -> fType
-//     | ChakraMatchExpr (_, (ChakraMatch (matchingPattern, clauses))) ->
-//         clauses
-//         |> List.map (fun (ChakraMatchClause (pattern, exprList)) -> exprListType env exprList)
-//         |> List.fold gatherTypes []
-//         |> typeListToType
-//     | ChakraNativeExpr (_) -> UnknownType
-
-// and reduceExprs env exprs =
-//     exprs
-//     |> List.map (exprType env)
-//     |> List.fold gatherTypes []
-//     |> typeListToType
-
-// and literalType env literal =
-//     match literal with
-//     | ChakraNumber _ -> NumberType
-//     | ChakraSymbol s -> SymbolType s
-//     | ChakraString _ -> StringType
-//     | ChakraTuple items -> TupleType(List.map (exprType env) items)
-//     | ChakraStruct  { Fields = fields } ->
-//         fields
-//         |> List.map (fun field-> (field.Name, exprType env field.Value))
-//         |> StructType
-
-//     | ChakraList { Items = items } -> items |> reduceExprs env |> ListType
-
-//     | ChakraMap { Pairs = entries } ->
-//         let (keyTypes, valueTypes) =
-//             entries
-//             |> List.fold (fun (keys, values) ({ Key = key ; Value = value}) ->
-//                 let keyType = literalType env key
-//                 let valueType = exprType env value
-//                 (keyType :: keys, valueType :: values)) ([], [])
-
-//         MapType
-//             (keyTypes
-//              |> List.fold gatherTypes []
-//              |> typeListToType,
-//              valueTypes
-//              |> List.fold gatherTypes []
-//              |> typeListToType)
-
-//     | ChakraVar (name, fields) ->
-//         match getTypeForBinding name env with
-//         | Some t -> t
-//         | _ -> UnknownType
-
-//     | ChakraLambda c ->
-//         let foldLambda (args, e: Env) (idx, a) =
-//             let argType = GenericType genericTypeVars.[idx]
-//             let args' = argType :: args
-//             let env' = addBinding a argType e
-//             (args', env')
-
-//         let (argTypes, newEnv) =
-//             c.Args
-//             |> List.indexed
-//             |> List.fold foldLambda ([], env)
-
-//         FunctionType(List.rev argTypes, (exprListType newEnv c.Body))
-
-// and exprListType env (ChakraExprList (bindings, expr)) =
-//     let reduceBindings =
-//         fun env1 ({ ExprList = exprList ; Pattern = pattern }) ->
-//             match pattern with
-//             | ChakraSimpleBindingPattern name -> addBinding name (exprListType env1 exprList) env1
-//             | _ -> env1
-
-//     bindings
-//     |> List.fold reduceBindings env
-//     |> (fun env1 -> exprType env1 expr)
 
 let invert (rs: Result<'a, 'b> list): Result<'a list, 'b> =
     let inner r acc =
@@ -276,13 +190,20 @@ and literalType (env: Env) (lit: ChakraLiteral) =
         | Some (Typed t) ->
             Ok(env, t)
         | Some (Errored e) -> Error e
-        | Some Untyped -> Error (TypeError "Untyped")
+        | Some Untyped -> Error (TypeError (sprintf "Untyped var %s" root))
         | None -> Error (TypeError (sprintf "Binding %s not defined" root))
-    | ChakraVar _ -> raise (System.Exception "Struct field access not yet supported")
+    | ChakraVar _ ->
+        // TODO: Handle struct field access
+        raise (System.Exception "Struct field access not yet supported")
 
 and exprType (env: Env) (expr: ChakraExpr) =
     match expr with
     | ChakraLiteralExpr (_, lit) -> literalType env lit
+    | ChakraApplyExpr (_, ChakraNamedApply ((root, path), pairs)) ->
+        // TODO: Match pair entries with arguments of function, then do the same as for regular
+        // apply with the exception that the returned function of a partial application takes
+        // the unfulfilled args
+        Error (TypeError "Named apply not yet supported")
     | ChakraApplyExpr (_, (ChakraApply ((root, path), exprs))) ->
         // Ensure the binding exists and is a function type
         // Ensure the supplied arguments match the parameters in length and type
@@ -292,21 +213,19 @@ and exprType (env: Env) (expr: ChakraExpr) =
         let fullPath = String.concat "." (root::path)
         match getTypeForBinding fullPath env with
         | Some (Typed (FunctionType (argTs, retT))) when argTs.Length = exprs.Length && argTs.Length > 0 -> // Total application
-            match invert (List.map (exprType env) exprs) with
-            | Ok ts ->
-                let env' = List.fold (fun acc (e, _) -> e) env ts
-                let result = (checkArgumentTypes (List.map snd ts) argTs)
-                Result.map (fun _ -> (env', retT)) result
+            match checkArgumentTypes env exprs argTs with
+            | Ok (e, ts) ->
+                Ok (e, retT)
             | Error e ->
                 Error e
+
         | Some (Typed (FunctionType (argTs, retT))) when argTs.Length > exprs.Length && argTs.Length > 0 -> // Partial application
-            match invert (List.map (exprType env) exprs) with
-            | Ok ts ->
-                let env' = List.fold (fun acc (e, _) -> e) env ts
-                let result = (checkArgumentTypes (List.map snd ts) (List.take exprs.Length argTs))
-                Result.map (fun _ -> (env', FunctionType (List.skip exprs.Length argTs, retT))) result
+            match checkArgumentTypes env exprs (List.take exprs.Length argTs) with
+            | Ok (e, ts) ->
+                Ok (e, FunctionType (List.skip exprs.Length argTs, retT))
             | Error e ->
                 Error e
+
         | Some (Untyped) -> // Recursive call
             match invert (List.map (exprType env) exprs) with
             | Ok ts ->
@@ -321,6 +240,11 @@ and exprType (env: Env) (expr: ChakraExpr) =
         // TODO: This is the heavy hitter, what really moves the type system
         // Really shouldn't be done until patterns are done
         raise (System.Exception "Not yet supported")
+    | ChakraPipeExpr pipe ->
+        // TODO: Basically take the head, wrap it in a expr, then add it to the exprs list of the
+        // apply, and then wrap that in a expr and repeat.  Once we have a ChakraApplyExpr, pass
+        // it back to this function  (Should this be done in the parse step?)
+        Error (TypeError "Pipes not yet supported")
     | ChakraNativeExpr _ -> raise (System.Exception "Should never be parsing native expressions")
 
 and exprListType (env: Env) (ChakraExprList (bs, e)) =
@@ -365,13 +289,17 @@ and patternType (env: Env) (patt: ChakraPattern) =
     | CPString (_, s) ->
         Ok (env, StringType)
     | CPTuple (_, ps) ->
-        Error (TypeError "Pattern not yet supported")
+        // TODO
+        Error (TypeError "Tuple Pattern not yet supported")
     | CPStruct (_, pstruct) ->
-        Error (TypeError "Pattern not yet supported")
+        // TODO
+        Error (TypeError "Struct Pattern not yet supported")
     | CPList (_, list) ->
-        Error (TypeError "Pattern not yet supported")
+        // TODO
+        Error (TypeError "List Pattern not yet supported")
     | CPMap (_, map) ->
-        Error (TypeError "Pattern not yet supported")
+        // TODO
+        Error (TypeError "Map Pattern not yet supported")
 
 and bindingType (env: Env) ({ ExprList = exprList ; Pattern = pattern }): Result<Env * Type, TypeError>  =
     match pattern with
@@ -379,6 +307,28 @@ and bindingType (env: Env) ({ ExprList = exprList ; Pattern = pattern }): Result
         exprListType (newScope [] env) exprList
     | ChakraFunctionBindingPattern { Args = args ; Name = bindingName } ->
         exprListType (newScope (List.map untypedBinding (bindingName::args)) env) exprList
+        |> Result.bind (fun (env', t) ->
+            // Get the type for each of the args, and pass it along in the function type
+            // If any args are untyped give it generic
+            let getArgTypesFromEnv arg acc =
+                match acc with
+                | Ok ((g: string), e', ts) ->
+                    match getTypeForBinding arg e' with
+                    | Some (Typed t) -> Ok (g, e', t::ts)
+                    | Some Untyped ->
+                        let t = typedBinding arg (gen g)
+                        let e'' = updateBinding t e'
+                        Ok (sprintf "%c" (char (int (g.Chars 0) + 1)), e'', (gen g)::ts)
+                    | Some (Errored e') ->
+                        Error e'
+                    | None ->
+                        Error (TypeError "Missing arg binding - THIS SHOULD NOT HAPPEN")
+                
+                | Error e -> Error e
+                
+            match List.foldBack getArgTypesFromEnv args (Ok ("a", env',  [])) with
+            | Ok (_, e', argTs) -> Ok (popScope e', fn argTs t)
+            | Error e' -> Error e')
     | ChakraComplexBindingPattern patt ->
         let elt = exprListType (newScope [] env) exprList
         Error (TypeError "Complex bindings not yet type-inferrable")
@@ -403,48 +353,34 @@ and collectArgTypes acc (argT, paramT) =
     | Some t -> Result.map (fun ts -> t::ts) acc
     | None -> Error (TypeError (sprintf "Argument of type %s could not unify with parameter of type %s" (print argT) (print paramT)))
 
-and checkArgumentTypes (argTypes: Type list) (paramTypes: Type list) : Result<Type list, TypeError> =
+and checkArgumentTypes' (argTypes: Type list) (paramTypes: Type list) : Result<Type list, TypeError> =
    (List.fold (collectArgTypes) (Ok []) (List.zip argTypes paramTypes))
 
-// (**************************************************************************************************
-// **
-// **    TESTS
-// **
-// **************************************************************************************************)
+and checkArgumentTypes (env: Env) (args: ChakraExpr list) (paramTypes: Type list) : Result<Env * Type list, TypeError> =
+    let rec inner (env: Env) (args: ChakraExpr list) (paramTypes: Type list) (ts: Type list) : Result<Env * Type list, TypeError> =
+        match (args, paramTypes) with
+        | (arg::args', paramT::paramTypes') ->
+            match checkArgumentExprAgainstParamType env arg paramT with
+            | Ok (e, t) ->
+                inner e args' paramTypes' (t::ts)
+            | Error e ->
+                Error e
+        | _ -> Ok (env, ts)
 
-// let literalTypeTests () =
-//     let literalTypeTest (label, input, typ) =
-//         (ParserLibrary.run chakraLiteral input)
-//         |> (fun result ->
-//             match result with
-//             | ParserLibrary.Success (literal, _) ->
-//                 let resultType = literalType (defaultEnv) literal
-//                 if resultType = typ
-//                 then printfn "%s : %s" input (print resultType)
-//                 else printfn "FAILED: %s\n%s <> %s" label (print resultType) (print typ)
-//             | _ ->
-//                 printfn "FAILED: Could not parse '%s'" input
-//                 ParserLibrary.printResult result)
+    inner env args paramTypes []
 
-//     [ ("A number", "1", NumberType)
-//       ("A string", "\"\"", StringType)
-//       ("A symbol", "#one", SymbolType "one")
-//       ("A simple tuple", "( 1, 2 )", TupleType [ NumberType; NumberType ])
-//       ("A simple list", "[ 1, 2, 3 ]", ListType NumberType)
-//       ("A complex list",
-//        "[ 1, #two, \"three\" ]",
-//        ListType
-//            (UnionType [ StringType
-//                         NumberType
-//                         SymbolType "three" ]))
-//       ("A simple struct",
-//        "%( something = 1, else = #two )",
-//        StructType [ ("something", NumberType)
-//                     ("else", SymbolType "two") ])
-//       ("A simple map", """%[ "something" = 1, "else" = 2 ]""", MapType(StringType, NumberType))
-//       ("A list of structs",
-//        "[ %( something = 1, else = #two ), %( something = 1, else = #two ), %( something = 1, else = #two ) ]",
-//        ListType
-//            (StructType [ ("something", NumberType)
-//                          ("else", SymbolType "two") ])) ]
-//     |> List.map literalTypeTest
+and checkArgumentExprAgainstParamType (env: Env) (arg: ChakraExpr) (paramT: Type) : Result<Env * Type, TypeError> =
+    match arg with
+    | ChakraLiteralExpr (_, ChakraVar (root, _)) ->
+        match getTypeForBinding root env with
+        | Some (Typed t) ->
+            match unify t paramT with
+            | Some t' -> Ok (env, t')
+            | None -> Error (TypeError (sprintf "Argument type does not match param type:\n\nArg Type:\n%s\n\nParam Type:\n%s" (print t) (print paramT)))
+        | Some (Untyped) ->
+            let env' = updateBinding (typedBinding root paramT) env
+            Ok (env', paramT)
+        | Some (Errored e) -> Error e
+        | None -> Error (TypeError (sprintf "Undefined variable: %s" root))
+    | _ ->
+      exprType env arg
