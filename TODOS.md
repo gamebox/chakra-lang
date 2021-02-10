@@ -1,11 +1,11 @@
-# TODOs
+# TODOS
 
-- [x] Implement Struct Member Access
-- [x] Implement ChakraPattern
-- [x] Reorganize current code to new setup
-- [x] Implement piplining
-- [ ] Implement match clause guards
-- [x] Change struct and map syntax to use '%' sigil
+- DONE Implement Struct Member Access
+- DONE Implement ChakraPattern
+- DONE Reorganize current code to new setup
+- DONE Implement piplining
+- TODO Implement match clause guards
+- DONE Change struct and map syntax to use '%' sigil
 
 
 ## New Setup

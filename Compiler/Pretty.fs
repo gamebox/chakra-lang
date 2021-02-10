@@ -210,9 +210,7 @@ let opWithComma op = op <&> TextOp ","
 let opWithNewline op = op <&> line
 
 let createFullId (id, maybePath) =
-    (id
-     + (Option.defaultValue [] maybePath
-        |> String.concat "."))
+    (String.concat "." (id::(Option.defaultValue [] maybePath)))
 
 let rec shouldStayOnOneLine expr nestingLevel =
     match expr with

@@ -127,9 +127,10 @@ suite "Unify" [
         litTypeTest chakraList "[\"a\", \"b\", \"c\"]" (list str)
         litTypeTest chakraTuple "(1, \"a\")" (tup [num; str])
         litTypeTest chakraStruct "%( a = 1, b = \"foo\")" (strct ([("a", num); ("b", str)], false, None))
-        litTypeTest chakraLambda "{ (a) ->\n\tb = 1\n\tc = \"a\"\n\t(b, c)\n}" (fn [] (tup [num; str]))
+        litTypeTest chakraLambda "{ (a) ->\n\tb = 1\n\tc = \"a\"\n\t(b, c)\n}" (fn [genA] (tup [num; str]))
         litTypeTestWithEnv (emptyWith ["a", str]) chakraVar "a" str
         litTypeTestWithEnv (emptyWith ["a", str]) chakraTuple "(1, a)" (tup [num; str])
+        litTypeTestWithEnv (emptyWith ["foo", (strct ([("a", num); ("b", str)], false, None))]) chakraVar "foo.b" str
     ]
 
     test "exprType - successful" [
@@ -145,7 +146,7 @@ suite "Unify" [
         exprTypeTest chakraLiteralExpr "[\"a\", \"b\", \"c\"]" (list str)
         exprTypeTest chakraLiteralExpr "(1, \"a\")" (tup [num; str])
         exprTypeTest chakraLiteralExpr "%( a = 1, b = \"foo\")" (strct ([("a", num); ("b", str)], false, None))
-        exprTypeTest chakraLiteralExpr "{ (a) ->\n\tb = 1\n\tc = \"a\"\n\t(b, c)\n}" (fn [] (tup [num; str]))
+        exprTypeTest chakraLiteralExpr "{ (a) ->\n\tb = 1\n\tc = \"a\"\n\t(b, c)\n}" (fn [genA] (tup [num; str]))
         exprTypeTestWithEnv (emptyWith ["a", str]) chakraLiteralExpr "a" str
         exprTypeTestWithEnv (emptyWith ["a", str]) chakraLiteralExpr "(1, a)" (tup [num; str])
         exprTypeTestWithEnv exprTestsEnv chakraApplyExpr "add(1, 1)" num

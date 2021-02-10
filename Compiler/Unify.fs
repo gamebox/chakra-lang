@@ -2,7 +2,7 @@ module Unify
 
 open ChakraParser
 open Env
-
+open System.IO
 
 let rec print typ =
     match typ with
@@ -64,6 +64,21 @@ let invert (rs: Result<'a, 'b> list): Result<'a list, 'b> =
         | Error e -> Error e
     List.foldBack inner rs (Ok [])
 
+let rec collectTypes<'a> typeFn (items: 'a list) (accEnv, accItemTs) =
+    match items with
+        | [] -> Ok (accEnv, accItemTs)
+        | item::items -> 
+            match typeFn accEnv item with
+            | Ok (e, t) -> collectTypes typeFn items (e, t::accItemTs)
+            | Error e -> Error e
+
+let symbolType env (s: string) =
+    let firstChar = (s.ToCharArray ()).[0]
+    if System.Char.IsUpper firstChar then
+        Ok (env, SymbolType (createModuleSymbol env s))
+    else
+        Ok (env, SymbolType (GlobalSymbol s))
+
 let rec unify (callerType: Type) (calleeType: Type) : Type option =
     if callerType = calleeType then
         Some callerType
@@ -112,12 +127,7 @@ and collectTypeResults (callerT, calleeT) acc : (Type list) option =
         | _ -> acc
 
 and reduceTypeResults (t: Type) (acc: Type option) : Type option =
-        match acc with
-        | Some t' ->
-            match unify t t' with
-            | Some t'' -> Some t''
-            | None -> None
-        | _ -> acc
+    Option.bind (unify t) acc
 
 and unifyAllFields callerTypes calleeTypes : ((string * Type) list) option =
     let collectTypeResults ((callerName, callerT), (calleeName, calleeT)) acc : ((string * Type) list) option =
@@ -136,7 +146,7 @@ and literalType (env: Env) (lit: ChakraLiteral) =
     match lit with
     | ChakraNumber _ -> Ok(env, NumberType)
     | ChakraString _ -> Ok(env, StringType)
-    | ChakraSymbol sym -> Ok(env, SymbolType (GlobalSymbol sym)) // TODO: Module symbol
+    | ChakraSymbol sym -> symbolType env sym // TODO: Module symbol
     | ChakraTuple exprs ->
         collectExprTypes exprs (env, [])
         |> Result.map (fun (e, ts) -> (e, TupleType (List.rev ts)))
@@ -180,21 +190,25 @@ and literalType (env: Env) (lit: ChakraLiteral) =
                         Ok (e', MapType (kt, vt))
                     | _ -> Error (TypeError "Map values had discordant types"))
             | _ -> Error (TypeError "Map keys had discordant types"))
-    | ChakraMap map ->
+    | ChakraMap _ ->
         Ok (env, MapType (genA, genB))
     | ChakraLambda l ->
-        exprListType (newScope (List.map untypedBinding (l.Args)) env) l.Body
-        |> Result.map(fun (e,t) -> (e, FunctionType ([], t)))
-    | ChakraVar (root, path) when path.IsNone ->
+        functionType env None l.Args l.Body
+    | ChakraVar (root, None) ->
         match getTypeForBinding root env with
         | Some (Typed t) ->
             Ok(env, t)
         | Some (Errored e) -> Error e
         | Some Untyped -> Error (TypeError (sprintf "Untyped var %s" root))
         | None -> Error (TypeError (sprintf "Binding %s not defined" root))
-    | ChakraVar _ ->
-        // TODO: Handle struct field access
-        raise (System.Exception "Struct field access not yet supported")
+    | ChakraVar (root, Some path) ->
+        match getTypeForBinding root env with
+        | Some (Typed (StructType (fs, _,_ ))) ->
+            Result.map (fun t -> (env, t)) (structFieldType path fs)
+        | Some (Typed t) -> Error (TypeError "Trying to access field of non-struct")
+        | Some (Errored e) -> Error e
+        | Some Untyped -> Error (TypeError (sprintf "Untyped var %s" root))
+        | None -> Error (TypeError (sprintf "Binding %s not defined" root))
 
 and exprType (env: Env) (expr: ChakraExpr) =
     match expr with
@@ -205,16 +219,24 @@ and exprType (env: Env) (expr: ChakraExpr) =
         // the unfulfilled args
         Error (TypeError "Named apply not yet supported")
     | ChakraApplyExpr (_, (ChakraApply ((root, path), exprs))) ->
-        // Ensure the binding exists and is a function type
-        // Ensure the supplied arguments match the parameters in length and type
-        // If they do, and the arguments are untyped, update their type with that
-        // of the parameter and then return the return type of the function
-        // Otherwise, return the appropriate type error.
         let fullPath = String.concat "." (root::path)
         match getTypeForBinding fullPath env with
         | Some (Typed (FunctionType (argTs, retT))) when argTs.Length = exprs.Length && argTs.Length > 0 -> // Total application
+            let gatherGenerics (acc: List<string>) (t: Type) : List<string> =
+                match t with
+                | GenericType g -> g::acc
+                | _ -> acc
+            let generics = List.fold gatherGenerics [] (retT::argTs)
             match checkArgumentTypes env exprs argTs with
             | Ok (e, ts) ->
+                printfn "%O" ts
+                // FIXME: Instantiate Generics
+                // If there are generics in the args, but not in the return type
+                // that is an error
+                // If the return type is generic, but no generics in the args,
+                // that is an error
+                // Otherwise, collect generics and see if each generic has only
+                // one unified type
                 Ok (e, retT)
             | Error e ->
                 Error e
@@ -241,29 +263,39 @@ and exprType (env: Env) (expr: ChakraExpr) =
         // Really shouldn't be done until patterns are done
         raise (System.Exception "Not yet supported")
     | ChakraPipeExpr pipe ->
-        // TODO: Basically take the head, wrap it in a expr, then add it to the exprs list of the
-        // apply, and then wrap that in a expr and repeat.  Once we have a ChakraApplyExpr, pass
-        // it back to this function  (Should this be done in the parse step?)
-        Error (TypeError "Pipes not yet supported")
+        let addArgToApply app loc arg =
+            match app with
+            | ChakraApply (name, args) ->
+                ChakraApplyExpr (loc, ChakraApply (name, List.append args [arg]))
+            | _ -> failwith "Not yet supported"
+
+        let addArgToApplyExpr expr arg =
+            match expr with
+            | ChakraApplyExpr (l, app) ->
+                match app with
+                | ChakraApply (name, args) ->
+                    ChakraApplyExpr (l, ChakraApply (name, List.append args [arg]))
+                | _ -> failwith "Not yet supported"
+            | _ -> failwith "This should never happen"
+
+        let head =
+            match (pipe.Head, List.tryHead pipe.Tail) with
+            | (ChakraPipeLiteralHead lit, Some (s, app)) ->
+                ChakraLiteralExpr (pipe.Loc, lit)
+                |> addArgToApply app s
+            | (ChakraPipeApplyHead a, Some (s, app)) ->
+                ChakraApplyExpr (pipe.Loc, a)
+                |> addArgToApply app s
+            | _ -> failwith "This should never happen"
+
+        let tail = List.map (ChakraApplyExpr) pipe.Tail.Tail
+
+        List.fold (addArgToApplyExpr) head tail
+        |> (exprType env)
     | ChakraNativeExpr _ -> raise (System.Exception "Should never be parsing native expressions")
 
 and exprListType (env: Env) (ChakraExprList (bs, e)) =
-    let handleBindingType (acc: Env) b =
-        match bindingType acc b with
-        | Ok (e, t) ->
-            match bindingName b with
-            | Some name -> addBinding (name, Typed t) e
-            | None -> e
-        | Error (e) -> 
-           match bindingName b with
-            | Some name -> addBinding (name, Errored e) acc
-            | None -> acc
-        
-    let env' =
-        List.fold
-            handleBindingType
-            env
-            bs
+    let env' = collectBindings bs env
     exprType env' e
 
 and bindingName (b: ChakraBinding) =
@@ -281,32 +313,46 @@ and patternType (env: Env) (patt: ChakraPattern) =
         Ok (env, genA)
     | CPVar (_, root, path) ->
         literalType env (ChakraVar (root, path))
-    | CPNumber (_, n) ->
+    | CPNumber _ ->
         Ok (env, NumberType)
     | CPSymbol (_, s) ->
-        // TODO: Handle module symbols
-        Ok (env, SymbolType (GlobalSymbol s))
-    | CPString (_, s) ->
+        symbolType env s
+    | CPString _ ->
         Ok (env, StringType)
     | CPTuple (_, ps) ->
-        // TODO
-        Error (TypeError "Tuple Pattern not yet supported")
+        collectTypes patternType ps (env, [])
+        |> Result.map (fun (e, t) -> (e, tup t))
     | CPStruct (_, pstruct) ->
-        // TODO
-        Error (TypeError "Struct Pattern not yet supported")
+        let typedFields : Result<(string * Type) list, TypeError> =
+            List.foldBack
+                (fun (f: CPStructField) acc ->
+                    match acc with
+                    | Ok fs -> 
+                        match patternType env f.ValuePattern with
+                        | Ok (_, t) -> Ok ((f.Name, t)::fs)
+                        | Error e -> Error e
+                    | _ -> acc)
+                pstruct.Fields
+                (Ok [])
+
+        Result.map (fun fs -> (env, StructType (fs, pstruct.Rest.IsSome, None))) typedFields
     | CPList (_, list) ->
-        // TODO
-        Error (TypeError "List Pattern not yet supported")
+        collectTypes patternType list.Items (env, [])
+        |> Result.bind (fun (e, ts) ->
+            match List.foldBack reduceTypeResults ts (Some (List.head ts)) with
+            | Some t -> Ok (e, ListType t)
+            | _ -> Error (TypeError "List pattern had discordant types"))
     | CPMap (_, map) ->
-        // TODO
+        // TODO Implement typing Map patterns
         Error (TypeError "Map Pattern not yet supported")
 
-and bindingType (env: Env) ({ ExprList = exprList ; Pattern = pattern }): Result<Env * Type, TypeError>  =
-    match pattern with
-    | ChakraSimpleBindingPattern bindingName ->
-        exprListType (newScope [] env) exprList
-    | ChakraFunctionBindingPattern { Args = args ; Name = bindingName } ->
-        exprListType (newScope (List.map untypedBinding (bindingName::args)) env) exprList
+and functionType (env: Env) (name: string option) (args: string list) (exprList: ChakraExprList) =
+    let bindingsToAdd =
+        match name with
+        | Some s -> s::args
+        | None -> args
+
+    exprListType (newScope (List.map untypedBinding bindingsToAdd) env) exprList
         |> Result.bind (fun (env', t) ->
             // Get the type for each of the args, and pass it along in the function type
             // If any args are untyped give it generic
@@ -318,7 +364,7 @@ and bindingType (env: Env) ({ ExprList = exprList ; Pattern = pattern }): Result
                     | Some Untyped ->
                         let t = typedBinding arg (gen g)
                         let e'' = updateBinding t e'
-                        Ok (sprintf "%c" (char (int (g.Chars 0) + 1)), e'', (gen g)::ts)
+                        Ok (nextGen g, e'', (gen g)::ts)
                     | Some (Errored e') ->
                         Error e'
                     | None ->
@@ -327,27 +373,28 @@ and bindingType (env: Env) ({ ExprList = exprList ; Pattern = pattern }): Result
                 | Error e -> Error e
                 
             match List.foldBack getArgTypesFromEnv args (Ok ("a", env',  [])) with
-            | Ok (_, e', argTs) -> Ok (popScope e', fn argTs t)
+            | Ok (_, e', argTs) ->
+                Ok (popScope e', fn argTs t)
             | Error e' -> Error e')
+
+and bindingType (env: Env) ({ ExprList = exprList ; Pattern = pattern }): Result<Env * Type, TypeError>  =
+    match pattern with
+    | ChakraSimpleBindingPattern bindingName ->
+        exprListType (newScope [] env) exprList
+    | ChakraFunctionBindingPattern { Args = args ; Name = bindingName } ->
+        functionType env (Some bindingName) args exprList
     | ChakraComplexBindingPattern patt ->
+        // TODO: Finish this
         let elt = exprListType (newScope [] env) exprList
         Error (TypeError "Complex bindings not yet type-inferrable")
-
-and collectTypes typeFn items (accEnv, accItemTs) =
-    match items with
-        | [] -> Ok (accEnv, accItemTs)
-        | item::items -> 
-            match typeFn accEnv item with
-            | Ok (e, t) -> collectTypes typeFn items (e, t::accItemTs)
-            | Error e -> Error e
 
 and collectExprTypes exprs' (accEnv, accExprTs) =
     collectTypes exprType exprs' (accEnv, accExprTs)
 
 and collectLiteralTypes lits (env, litTs) =
     collectTypes literalType lits (env, litTs)
-            
-    // TODO: Allow adding generic bindings?  Or do we do this here?
+          
+// BUG: Allow adding generic bindings?  Or do we do this here?
 and collectArgTypes acc (argT, paramT) =
     match unify argT paramT with
     | Some t -> Result.map (fun ts -> t::ts) acc
@@ -365,7 +412,8 @@ and checkArgumentTypes (env: Env) (args: ChakraExpr list) (paramTypes: Type list
                 inner e args' paramTypes' (t::ts)
             | Error e ->
                 Error e
-        | _ -> Ok (env, ts)
+        | _ ->
+            Ok (env, List.rev ts)
 
     inner env args paramTypes []
 
@@ -375,12 +423,87 @@ and checkArgumentExprAgainstParamType (env: Env) (arg: ChakraExpr) (paramT: Type
         match getTypeForBinding root env with
         | Some (Typed t) ->
             match unify t paramT with
-            | Some t' -> Ok (env, t')
-            | None -> Error (TypeError (sprintf "Argument type does not match param type:\n\nArg Type:\n%s\n\nParam Type:\n%s" (print t) (print paramT)))
+            | Some t' ->
+                Ok (env, t')
+            | None ->
+                Error (TypeError (sprintf "Argument type does not match param type:\n\nArg Type:\n%s\n\nParam Type:\n%s" (print t) (print paramT)))
         | Some (Untyped) ->
             let env' = updateBinding (typedBinding root paramT) env
             Ok (env', paramT)
-        | Some (Errored e) -> Error e
-        | None -> Error (TypeError (sprintf "Undefined variable: %s" root))
+        | Some (Errored e) ->
+            Error e
+        | None ->
+            Error (TypeError (sprintf "Undefined variable: %s" root))
     | _ ->
       exprType env arg
+and structFieldType (fieldSegments: string list) (fields: (string * Type) list) =
+    if (fieldSegments.IsEmpty || fields.IsEmpty) then
+        Error (TypeError "Struct access with no path or no fields")
+    else
+        let (fieldName::fs) = fieldSegments
+        match (List.tryFind (((=) fieldName) << fst) fields, fs) with
+        | (Some (_, t), []) ->
+            Ok t
+        | (Some (_, StructType (fs', _, _)), _) ->
+            structFieldType fs fs'
+        | _ ->
+            Error (TypeError "Trying to access a field of a non-struct")
+
+and collectBindings (bindings: ChakraBinding list) env : Env =
+    let handleBindingType (acc: Env) b =
+        match bindingType acc b with
+        | Ok (e, t) ->
+            match bindingName b with
+            | Some name -> addBinding (name, Typed t) e
+            | None -> e
+        | Error (e) -> 
+           match bindingName b with
+            | Some name -> addBinding (name, Errored e) acc
+            | None -> acc
+    
+    List.fold
+        handleBindingType
+        env
+        bindings
+
+let unifyModule (path: string list) (m: ChakraModule) (envs: Map<string, Env>) : Result<Env, string> = 
+    let rec collectImports (env: Env) imports: Result<Env, string> =
+        match imports with
+        | i::is ->
+            match i with
+            | ChakraLocalImport imp ->
+                if imp.Relative then
+                    let moduleName =
+                        (List.rev path
+                        |> List.tail
+                        |> List.append [imp.Library]
+                        |> List.rev
+                        |> String.concat "/")
+
+                    match Map.tryFind moduleName envs with
+                    | Some m ->
+                        let localBindings =
+                            match imp.Typ with
+                            | ChakraSimpleImportBinding b ->
+                                [typedBinding b (lowerIntoStruct m)]
+                            | ChakraDestructuredImportBinding destructurings ->
+                                // TODO: Support destructured import bindings
+                                failwith "Not supported yet"
+                        
+                        collectImports (addBindings localBindings env) is
+                    | None ->
+                        Error (sprintf "Cannot find module %s" moduleName)
+                else
+                    Ok env
+            | ChakraPackageImport imp ->
+                Ok env
+        | [] -> Ok env
+
+
+    collectImports defaultEnv m.Imports
+    |> Result.map (collectBindings m.Bindings)
+    |> Result.bind (fun env ->
+        if List.forall (hasTypedBinding env) m.Exports then
+            Ok env
+        else
+            Error "Missing exports")

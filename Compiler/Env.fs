@@ -54,23 +54,19 @@ type Type =
 
 type TypeError = TypeError of string
 
-let genericTypeVars =
-    List.map string ([ 'a' .. 'z' ] @ [ 'A' .. 'Z' ])
-
 type BindingType =
     | Typed of Type
     | Untyped
     | Errored of TypeError
 
 type Frame =
-    { Bindings: Map<string, BindingType>
-      Generic: int }
+    { Bindings: Map<string, BindingType> }
 
 /// <summary>
 /// A stack of maps that can be searched for symbols.
 /// </summary>
 ///
-type Env = { Current: Frame; Rest: Frame list }
+type Env = { Current: Frame; Rest: Frame list; Filename: string }
 
 
 (*
@@ -95,6 +91,7 @@ let cmd = CommandType
 
 let genA = gen "a"
 let genB = gen "b"
+let nextGen (prev: string) = (sprintf "%c" (char (int (prev.Chars 0) + 1)))
 let bool = union [ gSym "true"; gSym "false" ]
 
 let opt t =
@@ -143,27 +140,28 @@ let emptyWith bs =
     let bindings =
         new Map<string, BindingType>(List.map (fun (s, t) -> (s, Typed t)) bs)
 
-    { Current = { Bindings = bindings; Generic = 0 }
-      Rest = [] }
+    { Current = { Bindings = bindings }
+      Rest = []
+      Filename = "" }
 
 let defaultEnv =
-    { Current = { Bindings = stdlib; Generic = 0 }
-      Rest = [] }
+    { Current = { Bindings = stdlib  }
+      Rest = []
+      Filename = "" }
 
 let typedBinding (str: string) ty = (str, Typed ty)
 
 let untypedBinding (str: string) = (str, Untyped)
 
 let newScope (bs: (string * BindingType) list) { Current = c; Rest = r }: Env =
-    { Current =
-          { Bindings = Map(List.toArray bs)
-            Generic = 0 }
-      Rest = (c :: r) }
+    { Current = { Bindings = Map(List.toArray bs)  }
+      Rest = (c :: r)
+      Filename = "" }
 
 let popScope =
     function
     | { Current = _; Rest = [] } as e -> e
-    | { Current = _; Rest = top :: r } -> { Current = top; Rest = r }
+    | { Current = _; Rest = top :: r } -> { Current = top; Rest = r; Filename = ""  }
 
 let getTypeForBinding string { Current = c; Rest = r } =
     let rec innerFind =
@@ -176,11 +174,16 @@ let getTypeForBinding string { Current = c; Rest = r } =
 
     innerFind (c.Bindings :: (List.map (fun f -> f.Bindings) r))
 
-let addBinding (string, typ) { Current = c; Rest = r }: Env =
-    { Current =
-          { Bindings = Map.add string typ c.Bindings
-            Generic = c.Generic }
-      Rest = r }
+let hasTypedBinding env string =
+    match getTypeForBinding string env with
+    | Some (Typed _) -> true
+    | _ -> false
+
+let addBinding (string, typ) env: Env =
+    { env with Current = { env.Current with Bindings = Map.add string typ env.Current.Bindings } }
+
+let addBindings bindings env =
+    List.fold (fun acc b -> addBinding b acc) env bindings
 
 let mergeAs (prefix) env =
     match env with
@@ -192,20 +195,29 @@ let mergeAs (prefix) env =
             |> List.append (Map.toList top.Bindings)
             |> Map.ofList
 
-        { Current = { Bindings = newC; Generic = c.Generic }
-          Rest = r }
+        { env with
+            Current = { Bindings = newC }
+            Rest = r}
 
-let updateBinding (string, typ) { Current = c; Rest = r }: Env =
-    if c.Bindings.ContainsKey(string) then
-        { Current = 
-            { Bindings = Map.add string typ c.Bindings
-              Generic = c.Generic }
-          Rest = r }
+let updateBinding (string, typ) env: Env =
+    if env.Current.Bindings.ContainsKey(string) then
+        { env with Current = { env.Current with Bindings = Map.add string typ env.Current.Bindings } }
     else
+        let r = env.Rest
         match List.tryFindIndex (fun frame -> Map.containsKey string frame.Bindings) r with
         | Some i ->
-            let newF = { Bindings = Map.add string typ (List.item i r).Bindings ; Generic = c.Generic}
-            { Current = c
-              Rest = List.concat [List.take i r ; [newF]; List.skip (i + 1) r]}
-        | None ->
-            { Current = c; Rest = r }
+            let newF = { Bindings = Map.add string typ (List.item i r).Bindings }
+            { env with
+                Rest = List.concat [List.take i r ; [newF]; List.skip (i + 1) r] }
+        | None -> env
+
+
+let createModuleSymbol { Filename = f } str = ModuleSymbol (f, str)
+
+let lowerIntoStruct { Current = c} =
+    let collectTypedBindings (name, b) =
+        match b with
+        | Typed t -> (name, t)
+        | _ -> failwith "This should never happen"
+
+    strct ((List.map collectTypedBindings (Map.toList c.Bindings)), false ,None)
