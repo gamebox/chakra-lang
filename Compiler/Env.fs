@@ -39,7 +39,7 @@ type Type =
     | ListType of Type
     | MapType of key: Type * value: Type
     | StructType of fields: (string * Type) list * isOpen: bool * tag: SymbolInfo option
-    | FunctionType of args: Type list * ret: Type
+    | FunctionType of args: (string * Type) list * ret: Type
     // Opaque or Compiler types
     | CommandType // A command to the system
     | CapabilityType of Capability // A capability to perform an action
@@ -52,7 +52,22 @@ type Type =
 // Placeholder
 
 
-type TypeError = TypeError of string
+type TypeError =
+    | FatalTypeError of string
+    | UntypedError of varName: string
+    | FeatureNotSupported
+    | NonFunctionApplication of bindingName: string * typ: Type
+    | UndefinedBinding of string
+    | ArgumentMismatch of argT: Type * paramT: Type
+    | IllegalFieldAccess of binding: string * typ: Type
+    | UnifyError of types: Type list
+    | ModuleNotFound of moduleName: string
+    | ExportsMissing of missingExports: string list
+
+    member x.IsUntyped =
+        match x with
+        | UntypedError _ -> true
+        | _ -> false
 
 type BindingType =
     | Typed of Type
@@ -104,36 +119,36 @@ let stdlib =
     new Map<string, BindingType>(
         List.map
             (fun (s, t) -> (s, Typed t))
-            [ ("/stdlib.add", fn [ num; num ] num)
-              ("/stdlib.sub", fn [ num; num ] num)
-              ("/stdlib.div", fn [ num; num ] num)
-              ("/stdlib.mul", fn [ num; num ] num)
-              ("/stdlib.math.pow", fn [ num; num ] num)
-              ("/stdlib.math.floor", fn [ num ] num)
-              ("/stdlib.math.ceil", fn [ num ] num)
-              ("/stdlib.math.round", fn [ num ] num)
-              ("/stdlib.eq?", fn [ genA; genA ] bool)
-              ("/stdlib.neq?", fn [ genA; genA ] bool)
-              ("/stdlib.gt?", fn [ num; num ] bool)
-              ("/stdlib.lt?", fn [ num; num ] bool)
-              ("/stdlib.string.starts-with?", fn [ str; str ] bool)
-              ("/stdlib.string.ends-with?", fn [ str; str ] bool)
-              ("/stdlib.string.contains?", fn [ str; str ] bool)
-              ("/stdlib.string.substring", fn [ num; str ] str)
-              ("/stdlib.string.join", fn [ str; list str ] str)
-              ("/stdlib.map.has?", fn [ genA; map genA genB ] bool)
-              ("/stdlib.map.get", fn [ genA; map genA genB ] (opt genB))
-              ("/stdlib.map.set", fn [ genA; genB; map genA genB ] (map genA genB))
-              ("/stdlib.map.keys", fn [ map genA genB ] (list genA))
-              ("/stdlib.map.values", fn [ map genA genB ] (list genB))
-              ("/stdlib.map.pairs", fn [ map genA genB ] (list (tup [ genA; genB ])))
-              ("/stdlib.list.map", fn [ fn [ genA ] genB; list genA ] genB)
-              ("/stdlib.list.append", fn [ genA; list genA ] (list genA))
-              ("/stdlib.list.head", fn [ list genA ] (opt genA))
-              ("/stdlib.list.tail", fn [ list genA ] (list genA))
-              ("/stdlib.list.concat", fn [ list (list genA) ] (list genA))
-              ("/stdlib.list.fold", fn [ fn [ genB; genA ] genB; list (genA) ] genB)
-              ("/stdlib.io.print", fn [ cap StdioCapability; str ] (cmd)) ]
+            [ ("/stdlib.add", fn [ "a", num; "b", num ] num)
+              ("/stdlib.sub", fn [ "a", num; "b", num ] num)
+              ("/stdlib.div", fn [ "a", num; "b", num ] num)
+              ("/stdlib.mul", fn [ "a", num; "b", num ] num)
+              ("/stdlib.math.pow", fn [ "a", num; "b", num ] num)
+              ("/stdlib.math.floor", fn [ "a", num ] num)
+              ("/stdlib.math.ceil", fn [ "a", num ] num)
+              ("/stdlib.math.round", fn [ "a", num ] num)
+              ("/stdlib.eq?", fn [ "a", genA; "b", genA ] bool)
+              ("/stdlib.neq?", fn [ "a", genA; "b", genA ] bool)
+              ("/stdlib.gt?", fn [ "a", num; "b", num ] bool)
+              ("/stdlib.lt?", fn [ "a", num; "b", num ] bool)
+              ("/stdlib.string.starts-with?", fn [ "query", str; "string", str ] bool)
+              ("/stdlib.string.ends-with?", fn [ "query", str; "string", str ] bool)
+              ("/stdlib.string.contains?", fn [ "query", str; "string", str ] bool)
+              ("/stdlib.string.substring", fn [ "start", num; "end", num; "string", str ] str)
+              ("/stdlib.string.join", fn [ "separator", str; "strings", list str ] str)
+              ("/stdlib.map.has?", fn [ "key", genA; "map", map genA genB ] bool)
+              ("/stdlib.map.get", fn [ "key", genA; "map", map genA genB ] (opt genB))
+              ("/stdlib.map.set", fn [ "key", genA; "value", genB; "map", map genA genB ] (map genA genB))
+              ("/stdlib.map.keys", fn [ "map", map genA genB ] (list genA))
+              ("/stdlib.map.values", fn [ "map", map genA genB ] (list genB))
+              ("/stdlib.map.pairs", fn [ "map", map genA genB ] (list (tup [ genA; genB ])))
+              ("/stdlib.list.map", fn [ "fn", fn [ "item", genA ] genB; "list", list genA ] genB)
+              ("/stdlib.list.append", fn [ "item", genA; "list", list genA ] (list genA))
+              ("/stdlib.list.head", fn [ "list", list genA ] (opt genA))
+              ("/stdlib.list.tail", fn [ "list", list genA ] (list genA))
+              ("/stdlib.list.concat", fn [ "lists", list (list genA) ] (list genA))
+              ("/stdlib.list.fold", fn [ "fn", fn [ "state", genB; "item", genA ] genB; "list", list (genA) ] genB)
+              ("/stdlib.io.print", fn [ "cap", cap StdioCapability; "str", str ] (cmd)) ]
     )
 
 let emptyWith bs =

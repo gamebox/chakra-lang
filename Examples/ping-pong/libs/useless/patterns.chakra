@@ -59,3 +59,8 @@ increment-child(result) =
     ;; Expr list type :: num
     ;; increment-child :: (tup [lit ChakraSymbol "ok", strct [("label", num), ("children", list (struct [("label", num)]))]])) -> num
     ;; or in display type :: ((#ok, %( label = num, children = [%(label = num)]))) -> num
+
+increment-child(result) =
+    l = result.label
+    c = result.children
+    

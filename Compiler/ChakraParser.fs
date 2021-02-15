@@ -11,7 +11,7 @@ type ChakraVar =
       Rest: (string list) option }
 type ChakraPattern =
     | CPIgnore of Span
-    | CPVar of Span * string * (string list) option
+    | CPVar of Span * string
     | CPNumber of Span * Decimal
     | CPSymbol of Span * string
     | CPString of Span * string
@@ -27,7 +27,7 @@ and CPStructField =
 
 and CPStruct =
     { Fields: CPStructField list
-      Rest: (Span * ChakraVar) option }
+      Rest: (Span * string) option }
 
 and CPMapPair =
     { Loc: Span
@@ -36,11 +36,11 @@ and CPMapPair =
 
 and CPMap =
     { Pairs: CPMapPair list
-      Rest: (Span * ChakraVar) option }
+      Rest: (Span * string) option }
 
 and CPList =
     { Items: ChakraPattern list
-      Rest: (Span * ChakraVar) option}
+      Rest: (Span * string) option}
 
 type FunctionBindPatternInfo = { Name: string; Args: string list }
 
@@ -73,7 +73,7 @@ and ChakraStructField =
 
 and ChakraStruct =
     { Fields: ChakraStructField list
-      Spread: (Span * ChakraVar) option }
+      Spread: (Span * string) option }
 
 and ChakraMapPair =
     { Loc: Span
@@ -82,11 +82,11 @@ and ChakraMapPair =
 
 and ChakraMap =
     { Pairs: ChakraMapPair list
-      Spread: (Span * ChakraVar) option }
+      Spread: (Span * string) option }
 
 and ChakraList =
     { Items: ChakraExpr list
-      Spread: (Span * ChakraVar) option}
+      Spread: (Span * string) option}
 
 and ChakraLambda =
     { Args: string list
@@ -506,12 +506,9 @@ let container start end' item =
     between start items end'
 
 let spread =
-    let createSpread (span, (first, rest)) =
-        (span, { First = first; Rest = rest })
     pstring "..."
-    >>. pVar
+    >>. pBaseIdentifier
     |> withSpan
-    |>> createSpread
 
 let spreadableContainer start end' item =
     let items =
@@ -630,9 +627,8 @@ let cpIgnore =
     |>> CPIgnore
 
 let cpVar =
-    pVar
+    pBaseIdentifier
     |> withSpan
-    |>> flattenTuple
     |>> CPVar
 
 let cpNumber = 
@@ -657,7 +653,7 @@ let cpTuple =
 
 let cpStruct =
     let punnedPairConstructor (span, id) =
-        { Loc = span ; Name = id ; ValuePattern = CPVar (span, id, None)}
+        { Loc = span ; Name = id ; ValuePattern = CPVar (span, id)}
     let createPair (span, (name, value)) =
         { Loc = span; Name = name; ValuePattern = value}
     let createStruct (span, (pairs, spread)) =
