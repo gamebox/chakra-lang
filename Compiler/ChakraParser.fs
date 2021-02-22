@@ -27,7 +27,7 @@ and CPStructField =
 
 and CPStruct =
     { Fields: CPStructField list
-      Rest: (Span * string) option }
+      Rest: bool }
 
 and CPMapPair =
     { Loc: Span
@@ -656,10 +656,43 @@ let cpStruct =
         { Loc = span ; Name = id ; ValuePattern = CPVar (span, id)}
     let createPair (span, (name, value)) =
         { Loc = span; Name = name; ValuePattern = value}
-    let createStruct (span, (pairs, spread)) =
-        CPStruct (span, { Fields = pairs; Rest = spread })
+    let createStruct (span, (pairs, (rest: bool))) =
+        CPStruct (span, { Fields = pairs; Rest = rest })
 
-    pStruct structStart chakraPattern createPair punnedPairConstructor
+    let item =
+        let regularPair =
+            pBaseIdentifier .>> equal .>>. chakraPattern
+            |> withSpan
+            |>> createPair
+            <?> "regular struct pair"
+
+
+        let punned =
+            pBaseIdentifier
+            |> withSpan
+            |>> punnedPairConstructor
+            <?> "punned struct pair"
+
+        (regularPair <|> punned)
+        <?> "struct pair"
+
+    let sep = containerItemSeparator .>> deadOrWhitespace <?> "struct pair separator"
+
+    let form =
+        (structStart
+        >>. sepBy1 item sep
+        .>> rightParen
+        |>> fun (is) -> (is, false)
+        <?> "regular struct")
+        <|>
+        (structStart
+        >>. sepBy1 item sep
+        .>> sep 
+        .>> (pstring "...)" <?> "rest operator")
+        |>> (fun (is) -> (is, true))
+        <?> "struct with rest")
+
+    form
     |> withSpan
     |>> createStruct
     <?> "struct"
@@ -940,6 +973,21 @@ let chakraModule =
     <?> "significant newline"
     |>> buildModule
     <?> "module"
+
+(* Metadata *)
+
+let chakraMetdata =
+    let metadataBinding =
+        pBaseIdentifier
+        .>> equal
+        .>>. chakraLiteral
+
+    equal
+    >>. structStart
+    >>. sepBy1 metadataBinding (comma .>> deadOrWhitespace)
+    .>> rightParen
+    |>> Map
+    <?> "Metadata file"
 
 (* Set refs *)
 

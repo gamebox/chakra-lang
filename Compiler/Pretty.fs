@@ -44,7 +44,7 @@ type Doc =
 let nil = NilOp
 
 (* x <> y = x :<> y *)
-let (<&>) x y = UnionOp(x, y)
+let private (<&>) x y = UnionOp(x, y)
 
 (* nest i x = NEST i x *)
 let nest i x = NestOp(i, x)
@@ -143,12 +143,12 @@ let hardLine = text "\n"
 
 
 (* x <+> y = x <> text " " <> y *)
-let (<+>) x y = x <&> text " " <&> y
+let private (<+>) x y = x <&> text " " <&> y
 
 (* x </> y = x <> line <> y *)
-let (</>) x y = x <&> line <&> y
+let private (</>) x y = x <&> line <&> y
 
-let (</|>) x y = x <&> hardLine <&> y
+let private (</|>) x y = x <&> hardLine <&> y
 (*
     folddoc f [] = nil
     folddoc f [x] = x
@@ -182,7 +182,7 @@ let bracket l x r =
     group (text l <&> nest 1 (line <&> x) <&> line <&> text r)
 
 (* x <+/> y = x <> (text " " :<|> line) <> y *)
-let (<+/>) x y = x <&> FlattenOp(text " ", line) <&> y
+let private (<+/>) x y = x <&> FlattenOp(text " ", line) <&> y
 
 let wordRegex = Regex "\W+"
 let words = Array.toList << (wordRegex.Split)
@@ -253,8 +253,8 @@ let rec showPattern (patt: ChakraPattern) =
     match patt with
     | CPIgnore _ ->
         text "_"
-    | CPVar (_, s, p) ->
-        text (sprintf "%s" (createFullId (s, p)))
+    | CPVar (_, s) ->
+        text (sprintf "%s" s)
     | CPNumber (_, f) ->
         text (sprintf "%M" f)
     | CPSymbol (_, s) ->
@@ -271,7 +271,7 @@ let rec showPattern (patt: ChakraPattern) =
     | CPStruct (_, st) ->
         let shouldPun name value =
             match value with
-            | CPVar (_, str, None) -> name = str
+            | CPVar (_, str) -> name = str
             | _ -> false
 
         let fieldOp { Name = name ; ValuePattern = value} =
@@ -283,9 +283,9 @@ let rec showPattern (patt: ChakraPattern) =
                 <+> showPattern value
 
         let spreadOps =
-            match st.Rest with
-            | Some (_, var) -> [ text (sprintf "...%s" (createFullId (var.First, var.Rest))) ]
-            | _ -> []
+            if st.Rest then
+                [ text "..." ]
+            else []
 
         match st.Fields with
         | [] ->
@@ -303,7 +303,7 @@ let rec showPattern (patt: ChakraPattern) =
     | CPList (_, l) ->
         let spreadOps =
             match l.Rest with
-            | Some (_, var) -> [ text (sprintf "...%s" (createFullId (var.First, var.Rest))) ]
+            | Some (_, var) -> [ text (sprintf "...%s" var) ]
             | _ -> []
 
         match l.Items with
@@ -325,7 +325,7 @@ let rec showPattern (patt: ChakraPattern) =
 
         let spreadOps =
             match m.Rest with
-            | Some (_, var) -> [ text (sprintf "...%s" (createFullId (var.First, var.Rest))) ]
+            | Some (_, var) -> [ text (sprintf "...%s" var) ]
             | _ -> []
 
         match m.Pairs with
@@ -401,7 +401,7 @@ and showLiteral (lit: ChakraLiteral) =
                 <+> showExpr value
         let spreadOps =
             match spread with
-            | Some (_, var) -> [ text (createFullId (var.First, var.Rest)) ]
+            | Some (_, var) -> [ text var ]
             | _ -> []
 
         match fields with
@@ -419,16 +419,15 @@ and showLiteral (lit: ChakraLiteral) =
     | ChakraList { Items = [] ; Spread = None } ->
         text "[" <&> text "]"
     | ChakraList { Items = [] ; Spread = Some (_, var) } ->
-        let flattenedVar = createFullId (var.First, var.Rest)
 
         TextOp "[ "
-        <&> (text (sprintf "...%s" flattenedVar))
+        <&> (text (sprintf "...%s" var))
         <&> TextOp " ]"
     | ChakraList { Items = [ item ] ; Spread = spread } ->
         let itemOp = showExpr item
         let spreadOps =
             match spread with
-            | Some (_, var) -> [ text (createFullId (var.First, var.Rest)) ]
+            | Some (_, var) -> [ text (sprintf "...%s" var) ]
             | _ -> []
         text "["
         <&> (block 1 (List.map (opWithComma) (itemOp :: spreadOps)))
@@ -438,7 +437,7 @@ and showLiteral (lit: ChakraLiteral) =
         let spreadOps =
             match spread with
             | Some (_, var) ->
-                let op = text (sprintf "...%s" (createFullId (var.First, var.Rest)))
+                let op = text (sprintf "...%s" var)
                 [ op ]
             | _ -> []
 
@@ -454,7 +453,7 @@ and showLiteral (lit: ChakraLiteral) =
             <&> text ","
         let spreadOps =
             match spread with
-            | Some (_, var) -> [ text (createFullId (var.First, var.Rest)) ]
+            | Some (_, var) -> [ text var ]
             | _ -> []
 
         match pairs with

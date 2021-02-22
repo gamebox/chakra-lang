@@ -9,27 +9,37 @@ open Unify
 open Env
 open ChakraParser
 
-let runTest () =
-    let text =
-        """
-        x ?
-        | 1 -> ["one"]
-        | 2 -> ["two"]
-        | _ -> ["Other"]
-        """.TrimStart([| '\n'; '\t'; ' ' |])
+let runTest parser typeFn bindings (text: string) =
+    let env = emptyWith bindings
+    match ParserLibrary.run parser (text.Trim([| '\n'; '\t'; ' ' |])) with
+    | ParserLibrary.Success (cme, _) ->
+        match typeFn env cme with
+        | Ok (e, t) ->
+            printfn "%s" (print t)
+        | Error e ->
+            printfn "%s" (CConsole.red (sprintf "%O" e))
+    | ParserLibrary.Failure _ as f -> ParserLibrary.printResult f
+
+let matchTest = runTest chakraMatchExpr exprType
+let applyTest = runTest chakraApplyExpr exprType
+let bindingTest = runTest chakraBinding bindingType
+let patternTest = runTest chakraPattern patternType
 
 
-    let env = addBindings [untypedBinding "x"] (emptyWith [])
+let matchOne =
+    """
+    x ?
+    | 1 -> ["one"]
+    | 2 -> ["two"]
+    | _ -> ["Other"]
+    """
 
+let patternOne =
+    """
+    %(
+        foo = 2,
+        bar = 1,
+    ...)
+    """
 
-    let (ParserLibrary.Success (cme, _)) = ParserLibrary.run chakraMatchExpr text
-    let (Ok (e, t)) = exprType env cme
-    printfn "%s" (print t)
-    let (Some (Typed t')) = getTypeForBinding "x" e
-    printfn "x : %s" (print t')
-
-runTest ()
-
-
-let thread fn state items =
-    List.fold (fun acc item -> Result.bind (fun s -> fn s item) acc) (Ok state) items
+patternTest [] patternOne

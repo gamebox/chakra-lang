@@ -4,7 +4,7 @@ open System.IO
 open System.Text.RegularExpressions
 open ParserLibrary
 open ChakraParser
-open Format
+open Pretty
 
 
 let cleaner lines =
@@ -36,80 +36,77 @@ let rec gatherFiles directory =
     List.concat
         [ files ; List.concat dirs ]
 
+type Project = Project of projectName: string * root: string * version: string
+type BuildError =
+    | BuildIOError of string
+    | BuildConfigNoNameError
+    | BuildParseError of (ParserLabel * ParserError * ParserPosition) list
+    | BuildTypeError of Env.TypeError list
+    | BuildIRError
+    | BuildLinkError
+    | BuildCompileError
+
+let (.>>.) res fn = Result.bind fn res
+
+let fileContents path =
+    try
+        Ok (File.ReadAllLines path)
+        |> Result.map (String.concat "\n")
+    with
+    | _ -> Error (BuildIOError path) 
+
+let parseFile fileParser file =
+    run fileParser file
+    |> toResult
+    |> Result.map fst
+    |> Result.mapError (fun e -> BuildParseError [e])
+
+
+let projectFromMetadata metadataFilePath =
+    let parseMetadata = parseFile chakraMetdata
+    let extractMetadataFromParsed parsed =
+        match (Map.tryFind "name" parsed, Map.tryFind "version" parsed) with
+        | (Some (ChakraString name), Some (ChakraString v)) ->
+            Ok (Project (name, metadataFilePath, v))
+        | _ ->
+            Error BuildConfigNoNameError
+
+    fileContents metadataFilePath
+    .>>. parseMetadata
+    .>>. extractMetadataFromParsed
+
+let parseProjectFiles (Project (name, root, v)) =
+    // Directory.EnumerateFileSystemEntries (Path.Combine root "libs")
+    // |> List.ofSeq
+    Ok (Project (name, root, v))
+
+let verifyProject proj =
+    Ok proj
+
+let generateIR proj =
+    Ok proj
+
+let writeToDisk proj =
+    Ok proj
+
+let linkAndCompile proj =
+    Ok ()
+
+let metadataPath projectPath =
+    Path.Combine [| projectPath; "metadata.chakra" |]
+
 
 let build optPath =
-    let path = Option.defaultWith Directory.GetCurrentDirectory optPath
+    Option.defaultWith Directory.GetCurrentDirectory optPath
+    |> Path.GetFullPath
+    |> metadataPath
+    |> projectFromMetadata
+    .>>. parseProjectFiles
+    .>>. verifyProject
+    .>>. generateIR
+    .>>. writeToDisk
+    .>>. linkAndCompile
 
-    let chakraFilePaths = gatherFiles path
 
-    let fileFolder fileMap file =
-        let fileLines = File.ReadAllLines (file)
-        Map.add file fileLines fileMap
-    
-    let fileMap = 
-        Seq.fold fileFolder Map.empty chakraFilePaths
-    
-    let fileParseResultMapper k (v: string []) =
-        printfn "Parsing %s" k
-        run chakraModule (cleaner v)
 
-    let cleanFileMap =
-        Map.map fileParseResultMapper fileMap
 
-    let isFailure _ result =
-        match result with
-        | Failure _ -> true
-        | Success (_, is) -> not (atEndOfInput is)
-
-    let (failures, successes) = Map.partition isFailure cleanFileMap
-
-    let extractModuleFolder acc (fileName: string) (result: ParserResult<ChakraModule * InputState>) =
-        match result with
-        | Success (m, input) ->
-            // TODO: Create a function that returns a binding name based on the
-            // filename and the binding name
-            let bindingName ({ Pattern = pattern}) =
-                match pattern with
-                | ChakraFunctionBindingPattern info -> info.Name
-                | ChakraSimpleBindingPattern name -> name
-                | ChakraComplexBindingPattern _ -> ""
-
-            let addFlatBinding map binding =
-                let moduleName =
-                    fileName
-                        .Replace(".chakra", "")
-                        .Replace(path, "")
-
-                let resolvedName = sprintf "%s:%s" moduleName (bindingName binding)
-
-                Map.add
-                    resolvedName
-                    binding
-                    map
-
-            List.fold
-                addFlatBinding
-                acc
-                m.Bindings
-
-        | Failure (label, error, parserPos) -> acc
-
-    if Map.isEmpty failures then
-        // Map.fold extractModuleFolder Map.empty successes
-        // |> Map.iter (fun k v -> printfn "%s\n------------------------------\n%O" k v)
-        successes
-        |> Map.iter (fun k v ->
-            match v with
-            | Success (m, _) ->
-                printfn "%s\n----------------------\n%s" k (pretty 80 (showModule m))
-            | f ->
-                printfn "WTF?")
-    else
-        let printFailure fileName result =
-            printfn "%s\n------------------------\n" fileName
-            match result with
-            | Success(_, is) when not (atEndOfInput is) ->
-                printfn "Was not able to parse the entire module, ended on (%d, %d):\n%s" is.Position.Line is.Position.Column (currentLine is)
-            | _ -> printResult result
-
-        Map.iter printFailure failures

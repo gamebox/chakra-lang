@@ -23,6 +23,11 @@ type ParserResult<'a> =
     | Success of 'a
     | Failure of ParserLabel * ParserError * ParserPosition
 
+let toResult parserResult =
+    match parserResult with
+    | Success a -> Ok a
+    | Failure (label, err, p) -> Error (label, err, p)
+
 type Position = { Line: int; Column: int }
 type Span = { Start: Position; End: Position }
 
@@ -154,10 +159,15 @@ let resultString result =
         let errorLine = pos.CurrentLine
         let colPos = pos.Column
         let linePos = pos.Line
-        let failureCaret = sprintf "%*s^%s" colPos "" diag
+        let failureCaret =
+            sprintf "%*s^%s" colPos "" diag
+
         sprintf "Line:%i Col:%i Error parsing %s\n%s\n%s" linePos colPos label errorLine failureCaret
+        |> CConsole.red
     match result with
-    | Success (value, input) when atEndOfInput input -> sprintf "%A" value
+    | Success (value, input) when atEndOfInput input ->
+        sprintf "%A" value
+        |> CConsole.green
     | Success (_, is) ->
         let diag = "Ended parsing here" 
         let pos = { Line = is.Position.Line; Column = is.Position.Column; CurrentLine = (currentLine is) }
@@ -166,7 +176,7 @@ let resultString result =
         createDiagnosticLine parserPos label error
 
 let printResult result =
-    printfn "%s" (CConsole.red (resultString result))
+    printfn "%s" (resultString result)
 
 (*ParserResult
 ** Running
@@ -210,7 +220,8 @@ let setLabel parser newLabel =
         match result with
         | Success s -> Success s
 
-        | Failure (oldLabel, err, pos) -> Failure(newLabel, err, pos)
+        | Failure (oldLabel, err, pos) ->
+            Failure(sprintf "%s > %s" newLabel oldLabel, err, pos)
 
     { ParseFn = newInnerFn
       Label = newLabel }

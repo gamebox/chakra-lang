@@ -347,7 +347,7 @@ and patternType (env: Env) (patt: ChakraPattern) =
                 pstruct.Fields
                 (Ok [])
 
-        Result.map (fun fs -> (env, StructType(fs, pstruct.Rest.IsSome, None))) typedFields
+        Result.map (fun fs -> (env, StructType(fs, pstruct.Rest, None))) typedFields
     | CPList (_, list) ->
         collapseIntoType patternType env list.Items
         |> Result.map (fun (e, t) -> (addSpreadToEnv list.Rest (ListType t) e, ListType t))
@@ -515,21 +515,34 @@ and destructureIntoPattern env p t : Result<Env, TypeError> =
         List.zip ps ts
         |> thread (fun e (p, t) -> destructureIntoPattern e p t) env
 
-    | (CPStruct (_, pstruct), StructType (fs, o, t)) ->
-        if pStruct.Fields.Length < fs && pstruct.Rest.IsNone then
-            Error FeatureNotSupported
-        else
-            let patternsMap = Map (List.map (fun (p: CPStructField) -> (p.Name, p.ValuePattern)) pstruct.Fields)
+    | (CPStruct (_, pstruct), StructType (fs, o, tag)) ->
+        let destructureField (fields: Map<string, Type>) e (k, v) =
+            match Map.tryFind k fields with
+            | Some f ->
+                destructureIntoPattern e v t
+            | None -> Error (PatternMismatch (p, t))
+
+        let destructureFields () =
             let fieldsMap = Map fs
-            Ok env
+            List.map (fun (p: CPStructField) -> (p.Name, p.ValuePattern)) pstruct.Fields
+            |> thread (destructureField fieldsMap) env
+
+        match (compare pstruct.Fields.Length fs.Length, pstruct.Rest) with
+        | (-1, true) ->
+            destructureFields ()
+        | (0, false) ->
+            destructureFields ()
+        | __ ->
+            Error (PatternMismatch (p, t))
         
 
     | (CPList (_, list), ListType t) ->
         list.Items
         |> thread (fun e p -> destructureIntoPattern e p t) env
-        |> Result.map (fun e -> addSpreadToEnv list.Rest (ListType t) e )
+        |> Result.map (addSpreadToEnv list.Rest (ListType t))
 
-    | (CPMap (_, map) , MapType _)-> Error FeatureNotSupported
+    | (CPMap (_, map) , MapType _)->
+        Error FeatureNotSupported
     | _ -> Error (UnifyError [])
 
 let buildImportBindings moduleName envs imp =

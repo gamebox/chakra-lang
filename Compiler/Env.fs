@@ -63,6 +63,7 @@ type TypeError =
     | UnifyError of types: Type list
     | ModuleNotFound of moduleName: string
     | ExportsMissing of missingExports: string list
+    | PatternMismatch of pattern: ChakraPattern * typ: Type
 
     member x.IsUntyped =
         match x with
