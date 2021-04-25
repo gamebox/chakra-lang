@@ -1,6 +1,9 @@
 #load "CConsole.fs"
 #load "ParserLibrary.fs"
+#load "AST.fs"
 #load "ChakraParser.fs"
+#load "TypeSystem.fs"
+#load "TypedAST.fs"
 #load "Env.fs"
 #load "Pretty.fs"
 #load "Unify.fs"
@@ -8,6 +11,8 @@
 open Unify
 open Env
 open ChakraParser
+open AST
+open TypeSystem
 
 let cRed = CConsole.red
 let cGreen = CConsole.green
@@ -65,9 +70,9 @@ let typeTestWithEnv prettier test' env p str t () =
                 printfn "%s" (cRed msg)
                 printfn "%s" (cRed (sprintf "Got: %s" (print t')))
                 Error msg
-        | Error (TypeError e) ->
+        | Error e ->
             printfn "%s" (cRed msg)
-            printfn "%s" (cRed (sprintf "Problem: %s" e))
+            printfn "%s" (cRed (sprintf "Problem: %O" e))
             Error msg
     | (ParserLibrary.Failure _) ->
         let msg = (sprintf "Failed to parse: %s" str)
@@ -88,6 +93,85 @@ let exprTypeTest p str t () =
 
 let bindingTypeTestWithEnv env p str t () =
     typeTestWithEnv Pretty.showBinding bindingType env p str t ()
+
+let b =
+    """
+    print(type) =
+        type ?
+        | #union-type(types) ->
+            types
+            > map(print)
+            > concat(" | ")
+            > format("< %s >") ; This is not a planned feature
+            ; Would desugar to
+            ; format("< %s >", concat(" | ", map(print, types)))
+
+        | #sum-type(types) ->
+            types
+            > map(print)
+            > concat(" + ")
+            > format("< %s >") ; This is not a planned feature
+
+        | #string-type -> "str"
+
+        | #number-type -> "num"
+
+        | #symbol-type(info) ->
+            info ?
+            | #global-symbol(s) -> format("#%s", s)
+            | #module-symbol(m, s) -> format("#%s/%s", m, s)
+
+        | #literal-type(literal) -> pretty(80, showLiteral literal)
+
+        | #tuple-type(type) ->
+            map(print, types)
+            > concat(", ")
+            > format(" %s ")
+
+        | #list-type(generic-type) ->
+            print(generic-type)
+            > format("[ %s ]")
+
+        | #map-type(key-type, value-type) ->
+            format("%%[ %s = %s ]", print(key-type), print(value-type))
+
+        | #struct-type(fields, is-open, tag) ->
+            open-sigil =
+                is-open ?
+                | #true -> "..."
+                | #false -> ""
+
+            pairs =
+                fields
+                > map({ (name, type) -> format(".%s = %s", name, print(type))})
+                > concat(", ")
+
+            format("%%( %s %s)", pairs, open-sigil)
+
+        | #function-type(args, return) ->
+            arg-list =
+                args
+                > map(compose(snd, print))
+                > concat(", ")
+
+            format("{ %s -> %s }", arg-list, print(return))
+
+        | #generic-type(type) -> format("?%s", type)
+
+        | #capability-type(cap) ->
+            cap ?
+            | #stdio-capability -> "$stdio"
+            | #file-read-capability -> "$fread"
+            | #file-write-capability -> "#fwrite"
+
+        | #command-type -> "!"
+
+        | #polymorphic-type(t) -> format("@%s", t)
+
+        | #ref-type(t) -> format("&%s", print(t))
+    """.TrimStart([|'\n';'\t';' '|])
+
+bindingTypeTestWithEnv (defaultEnv) chakraBinding b (str) ()
 
 let exprTestsEnv = emptyWith [
     ("add", fn [ num; num ] num)

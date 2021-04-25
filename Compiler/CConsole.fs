@@ -34,3 +34,4 @@ let private withColor code n = sprintf "%s%s%s" (color code) n (color reset)
 
 let red n = withColor redFg n
 let green n = withColor greenFg n
+let blue n = withColor blueFg n

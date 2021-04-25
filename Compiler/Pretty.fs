@@ -4,6 +4,7 @@
 *)
 module Pretty
 
+open AST
 open ChakraParser
 open System.Text.RegularExpressions
 

@@ -4,13 +4,16 @@
     <TargetFramework>net50</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Graph.fs" />
     <Compile Include="Codegen.fs" />
     <Compile Include="CConsole.fs" />
-    <Compile Include="ParserLibraryCSP.fs" />
     <Compile Include="ParserLibrary.fs" />
+    <Compile Include="AST.fs" />
+    <Compile Include="TypeSystem.fs" />
+    <Compile Include="TypedAST.fs" />
     <Compile Include="ChakraParser.fs" />
-    <Compile Include="Env.fs" />
     <Compile Include="Pretty.fs" />
+    <Compile Include="Env.fs" />
     <Compile Include="Unify.fs" />
     <Compile Include="Command.fs" />
     <Compile Include="Build.fs" />

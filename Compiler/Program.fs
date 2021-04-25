@@ -1,5 +1,6 @@
 ﻿//open Repl
 open Build
+
 let versionInfo = "chakra v0.0.1"
 let help =
     sprintf "\
@@ -8,7 +9,6 @@ let help =
     │                                                                        │\n\
     │ help          Prints this help                                         │\n\
     │ version       Shows version information                                │\n\
-    │ repl          Starts an interactive REPL shell                         │\n\
     │ build [path]  [TODO] Build an app in the current directory if path is  │\n\
     │               is not specified, or the app in the directory specified. │\n\
     │ format PATH   Formats the Chakra file at PATH                          │\n\
@@ -29,10 +29,10 @@ let main argv =
             printfn "%s" versionInfo
         | Command.Build optPath ->
             //Blah.test ChakraParser.chakraBinding
-            build (Some "/home/anthony/dev/chakra-lang/Examples/ping-pong")
+            build optPath
             //printfn "Build not yet implemented"
         | Command.Format str ->
-            Format.format str
+            Pretty.format str
         
             
         0

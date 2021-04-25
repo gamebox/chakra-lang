@@ -1,56 +1,8 @@
 module Env
 
-open ChakraParser
-
-type Capability =
-    | StdioCapability
-    | FileReadCapability
-    | FileWriteCapability
-
-type StdioFD =
-    | Stdin
-    | Stdout
-    | Stderr
-
-type ActorRef<'msg> = Actor of 'msg
-// type Cmd =
-//     | StdioPrintCommand
-//     | SendCommand
-//     | TimeoutCommand
-//     | IntervalCommand
-//     | FileOpenCommand
-//     | FileReadCommand
-//     | FileWriteCommand
-//     | StdioReadCommand
-//     | GetRandomCommand
-//     | GetDateCommand
-
-type SymbolInfo =
-    | GlobalSymbol of string
-    | ModuleSymbol of mod': string * name: string
-
-type Type =
-    // Concrete Types
-    | StringType
-    | NumberType
-    | SymbolType of SymbolInfo
-    | LiteralType of ChakraLiteral
-    | TupleType of Type list
-    | ListType of Type
-    | MapType of key: Type * value: Type
-    | StructType of fields: (string * Type) list * isOpen: bool * tag: SymbolInfo option
-    | FunctionType of args: (string * Type) list * ret: Type
-    // Opaque or Compiler types
-    | CommandType // A command to the system
-    | CapabilityType of Capability // A capability to perform an action
-    | RefType of Type // A reference to an Actor that takes a msg of Type
-    // ADT
-    | GenericType of string // A type variable
-    | UnionType of Type list // One or more different type
-    | SumType of Type list // Multiple different types
-    | PolymorphicType of string // Typeclass membership
+open AST
+open TypeSystem
 // Placeholder
-
 
 type TypeError =
     | FatalTypeError of string
@@ -82,75 +34,45 @@ type Frame =
 /// A stack of maps that can be searched for symbols.
 /// </summary>
 ///
-type Env = { Current: Frame; Rest: Frame list; Filename: string }
-
-
-(*
-    Type Helpers
-*)
-let num = NumberType
-
-let str = StringType
-let gSym = SymbolType << GlobalSymbol
-let mSym = SymbolType << ModuleSymbol
-let lit = LiteralType
-let tup = TupleType
-let list = ListType
-let map k v = MapType(k, v)
-let strct = StructType
-let fn args retrn = FunctionType(args, retrn)
-let gen = GenericType
-let union = UnionType
-let sum = SumType
-let cap = CapabilityType
-let cmd = CommandType
-
-let genA = gen "a"
-let genB = gen "b"
-let nextGen (prev: string) = (sprintf "%c" (char (int (prev.Chars 0) + 1)))
-let bool = union [ gSym "true"; gSym "false" ]
-
-let opt t =
-    union [ lit (ChakraSymbol "none")
-            tup [ lit (ChakraSymbol "some"); t ] ]
-
+type Env =
+    { Current: Frame
+      Rest: Frame list
+      Filename: string }
 
 
 let stdlib =
-    new Map<string, BindingType>(
-        List.map
-            (fun (s, t) -> (s, Typed t))
-            [ ("/stdlib.add", fn [ "a", num; "b", num ] num)
-              ("/stdlib.sub", fn [ "a", num; "b", num ] num)
-              ("/stdlib.div", fn [ "a", num; "b", num ] num)
-              ("/stdlib.mul", fn [ "a", num; "b", num ] num)
-              ("/stdlib.math.pow", fn [ "a", num; "b", num ] num)
-              ("/stdlib.math.floor", fn [ "a", num ] num)
-              ("/stdlib.math.ceil", fn [ "a", num ] num)
-              ("/stdlib.math.round", fn [ "a", num ] num)
-              ("/stdlib.eq?", fn [ "a", genA; "b", genA ] bool)
-              ("/stdlib.neq?", fn [ "a", genA; "b", genA ] bool)
-              ("/stdlib.gt?", fn [ "a", num; "b", num ] bool)
-              ("/stdlib.lt?", fn [ "a", num; "b", num ] bool)
-              ("/stdlib.string.starts-with?", fn [ "query", str; "string", str ] bool)
-              ("/stdlib.string.ends-with?", fn [ "query", str; "string", str ] bool)
-              ("/stdlib.string.contains?", fn [ "query", str; "string", str ] bool)
-              ("/stdlib.string.substring", fn [ "start", num; "end", num; "string", str ] str)
-              ("/stdlib.string.join", fn [ "separator", str; "strings", list str ] str)
-              ("/stdlib.map.has?", fn [ "key", genA; "map", map genA genB ] bool)
-              ("/stdlib.map.get", fn [ "key", genA; "map", map genA genB ] (opt genB))
-              ("/stdlib.map.set", fn [ "key", genA; "value", genB; "map", map genA genB ] (map genA genB))
-              ("/stdlib.map.keys", fn [ "map", map genA genB ] (list genA))
-              ("/stdlib.map.values", fn [ "map", map genA genB ] (list genB))
-              ("/stdlib.map.pairs", fn [ "map", map genA genB ] (list (tup [ genA; genB ])))
-              ("/stdlib.list.map", fn [ "fn", fn [ "item", genA ] genB; "list", list genA ] genB)
-              ("/stdlib.list.append", fn [ "item", genA; "list", list genA ] (list genA))
-              ("/stdlib.list.head", fn [ "list", list genA ] (opt genA))
-              ("/stdlib.list.tail", fn [ "list", list genA ] (list genA))
-              ("/stdlib.list.concat", fn [ "lists", list (list genA) ] (list genA))
-              ("/stdlib.list.fold", fn [ "fn", fn [ "state", genB; "item", genA ] genB; "list", list (genA) ] genB)
-              ("/stdlib.io.print", fn [ "cap", cap StdioCapability; "str", str ] (cmd)) ]
-    )
+    [ ("add", fn [ "a", num; "b", num ] num)
+      ("sub", fn [ "a", num; "b", num ] num)
+      ("div", fn [ "a", num; "b", num ] num)
+      ("mul", fn [ "a", num; "b", num ] num)
+      ("math.pow", fn [ "a", num; "b", num ] num)
+      ("math.floor", fn [ "a", num ] num)
+      ("math.ceil", fn [ "a", num ] num)
+      ("math.round", fn [ "a", num ] num)
+      ("eq?", fn [ "a", genA; "b", genA ] bool)
+      ("neq?", fn [ "a", genA; "b", genA ] bool)
+      ("gt?", fn [ "a", num; "b", num ] bool)
+      ("lt?", fn [ "a", num; "b", num ] bool)
+      ("string.starts-with?", fn [ "query", str; "string", str ] bool)
+      ("string.ends-with?", fn [ "query", str; "string", str ] bool)
+      ("string.contains?", fn [ "query", str; "string", str ] bool)
+      ("string.substring", fn [ "start", num; "end", num; "string", str ] str)
+      ("string.join", fn [ "separator", str; "strings", list str ] str)
+      ("map.has?", fn [ "key", genA; "map", map genA genB ] bool)
+      ("map.get", fn [ "key", genA; "map", map genA genB ] (opt genB))
+      ("map.set", fn [ "key", genA; "value", genB; "map", map genA genB ] (map genA genB))
+      ("map.keys", fn [ "map", map genA genB ] (list genA))
+      ("map.values", fn [ "map", map genA genB ] (list genB))
+      ("map.pairs", fn [ "map", map genA genB ] (list (tup [ genA; genB ])))
+      ("list.map", fn [ "fn", fn [ "item", genA ] genB; "list", list genA ] genB)
+      ("list.append", fn [ "item", genA; "list", list genA ] (list genA))
+      ("list.head", fn [ "list", list genA ] (opt genA))
+      ("list.tail", fn [ "list", list genA ] (list genA))
+      ("list.concat", fn [ "lists", list (list genA) ] (list genA))
+      ("list.fold", fn [ "fn", fn [ "state", genB; "item", genA ] genB; "list", list (genA) ] genB)
+      ("io.print", fn [ "cap", cap StdioCapability; "str", str ] (cmd)) ]
+    |> List.map (fun (s, t) -> (s, Typed t))
+    |> Map<string, BindingType>
 
 let emptyWith bs =
     let bindings =
