@@ -25,20 +25,17 @@ type ActorRef<'msg> = Actor of 'msg
 //     | GetRandomCommand
 //     | GetDateCommand
 
-type SymbolInfo =
-    | GlobalSymbol of string
-    | ModuleSymbol of mod': string * name: string
 
 type Type =
     // Concrete Types
     | StringType
     | NumberType
-    | SymbolType of SymbolInfo
+    | SymbolType of string
     | LiteralType of ChakraLiteral
     | TupleType of Type list
     | ListType of Type
     | MapType of key: Type * value: Type
-    | StructType of fields: (string * Type) list * isOpen: bool * tag: SymbolInfo option
+    | StructType of fields: (string * Type) list * isOpen: bool * tag: string option
     | FunctionType of args: (string * Type) list * ret: Type
     // Opaque or Compiler types
     | CommandType // A command to the system
@@ -54,14 +51,11 @@ type Type =
 let num = NumberType
 
 let str = StringType
-let gSym = SymbolType << GlobalSymbol
-let mSym = SymbolType << ModuleSymbol
-let sym (s: string) =
-    let firstChar = (s.ToCharArray()).[0]
+let gSym = SymbolType
 
-    if System.Char.IsUpper firstChar then
-        mSym s
-    else gSym s
+let mSym s moduleName =
+    SymbolType(sprintf "%s/%s" moduleName s)
+
 let lit = LiteralType
 let tup = TupleType
 let list = ListType
@@ -76,7 +70,10 @@ let cmd = CommandType
 
 let genA = gen "a"
 let genB = gen "b"
-let nextGen (prev: string) = (sprintf "%c" (char (int (prev.Chars 0) + 1)))
+
+let nextGen (prev: string) =
+    (sprintf "%c" (char (int (prev.Chars 0) + 1)))
+
 let bool = union [ gSym "true"; gSym "false" ]
 
 let opt t =

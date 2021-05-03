@@ -4,7 +4,10 @@ open System.IO
 open System.Text.RegularExpressions
 open ParserLibrary
 open ChakraParser
+open AST
 open Pretty
+open TypedAST
+open Env
 
 
 let cleaner lines =
@@ -26,25 +29,23 @@ let cleaner lines =
 
 let rec gatherFiles directory =
     let dirs =
-        Directory.EnumerateDirectories (directory)
+        Directory.EnumerateDirectories(directory)
         |> Seq.map gatherFiles
+
     let files =
-        Directory.EnumerateFiles (directory)
+        Directory.EnumerateFiles(directory)
         |> Seq.filter (fun f -> f.EndsWith(".chakra"))
         |> Seq.toList
 
-    List.concat
-        [ files ; List.concat dirs ]
+    List.concat [ files; List.concat dirs ]
 
 type Project = Project of projectName: string * root: string * version: string
 
 type ParsedProjectInfo =
-    {
-        ProjectName: string
-        Root: string
-        Version: string
-        Modules: Map<string, ChakraModule>
-    }
+    { ProjectName: string
+      Root: string
+      Version: string
+      Modules: Map<string, ChakraModule> }
 
 type ParsedProject = ParsedProject of ParsedProjectInfo
 
@@ -64,10 +65,9 @@ let printPhase phase = printfn "%s" (CConsole.blue phase)
 
 let fileContents path =
     try
-        Ok (File.ReadAllLines path)
+        Ok(File.ReadAllLines path)
         |> Result.map (String.concat "\n")
-    with
-    | _ -> Error (BuildIOError path) 
+    with _ -> Error(BuildIOError path)
 
 let parseFile fileParser file =
     run fileParser file
@@ -76,18 +76,18 @@ let parseFile fileParser file =
     |> Result.mapError (BuildParseError)
 
 let metadataPath projectPath =
-    Path.Combine [| projectPath; "meta.chakra" |]
+    Path.Combine [| projectPath
+                    "meta.chakra" |]
 
 let projectFromMetadata projectPath =
     printPhase "Gathering Metadata"
     let metadataFilePath = metadataPath projectPath
     let parseMetadata = parseFile chakraMetdata
+
     let extractMetadataFromParsed parsed =
         match (Map.tryFind "name" parsed, Map.tryFind "version" parsed) with
-        | (Some (ChakraString name), Some (ChakraString v)) ->
-            Ok (Project (name, projectPath, v))
-        | (Some (ChakraString name), _) ->
-                    Ok (Project (name, projectPath, "0.0.1"))
+        | (Some (ChakraString name), Some (ChakraString v)) -> Ok(Project(name, projectPath, v))
+        | (Some (ChakraString name), _) -> Ok(Project(name, projectPath, "0.0.1"))
         | (a, b) ->
             printfn "%O\n%O" a b
             Error BuildConfigNoNameError
@@ -96,56 +96,70 @@ let projectFromMetadata projectPath =
     .>>. parseMetadata
     .>>. extractMetadataFromParsed
 
+let modName (file: string) =
+    ((file.Replace('/', '.')).Replace('\\', '.'))
+
 let parseProjectFiles (Project (name, root, v)) =
     printPhase "Parsing"
-    let rec collectFiles path : string list =   
-        if File.GetAttributes path = FileAttributes.Directory then 
-            let files =
-                Directory.GetFiles path
-                |> List.ofSeq
+
+    let rec collectFiles path : string list =
+        if File.GetAttributes path = FileAttributes.Directory then
+            let files = Directory.GetFiles path |> List.ofSeq
+
             let dirs =
-                Directory.GetDirectories path
-                |> List.ofSeq
-            
+                Directory.GetDirectories path |> List.ofSeq
+
             match dirs with
             | [] -> files
-            | _ ->
-                List.fold (fun acc p -> List.concat [acc ; collectFiles p]) files dirs
-        else []
+            | _ -> List.fold (fun acc p -> List.concat [ acc; collectFiles p ]) files dirs
+        else
+            []
 
     let parseAllFiles res filePath =
-        let consRight tail h = h::tail
+        let consRight tail h = h :: tail
         let pair l r = (l, r)
 
-        res .>>.
-        (fun files ->
+        res
+        .>>. (fun files ->
             (fileContents filePath)
-            .>>. (parseFile chakraModule)
+            .>>. (fun file -> (parseFile (chakraModule (modName file)) file))
             |> Result.map ((consRight files) << (pair filePath)))
 
 
 
-    collectFiles (Path.Combine (root, "libs"))
+    collectFiles (Path.Combine(root, "libs"))
     |> List.fold parseAllFiles (Ok [])
-    |> Result.map (fun pairs ->
-        ParsedProject { ProjectName = name; Root = root ; Version = v; Modules = Map pairs})
+    |> Result.map
+        (fun pairs ->
+            ParsedProject
+                { ProjectName = name
+                  Root = root
+                  Version = v
+                  Modules = Map pairs })
 
 let importedModules ({ Imports = imports }: ChakraModule) modulePath =
-    List.map (fun im ->
-        match im with
-        | ChakraLocalImport i ->
-            if i.Relative then
-                i.Library
-            else
-                sprintf "/libs/%s" i.Library
-        | ChakraPackageImport i ->
-            sprintf "/pkgs/%s" i.PackageName) imports
+    List.map
+        (fun im ->
+            match im with
+            | ChakraLocalImport i ->
+                if i.Relative then
+                    i.Library
+                else
+                    sprintf "/libs/%s" i.Library
+            | ChakraPackageImport i -> sprintf "/pkgs/%s" i.PackageName)
+        imports
     |> List.filter ((<>) "/pkgs/stdlib")
 
-let relativePath root path = Path.GetRelativePath (root, path)
+let relativePath root path = Path.GetRelativePath(root, path)
 
-let verifyProject (ParsedProject { ProjectName = name; Root = root ; Version = v; Modules = modules}) =
+let verifyProject
+    (ParsedProject { ProjectName = name
+                     Root = root
+                     Version = v
+                     Modules = modules })
+    =
     printPhase "Verifying"
+
     let sortResult =
         Map.toList modules
         |> List.map (fun (s, m) -> (s, m, importedModules m s))
@@ -154,18 +168,24 @@ let verifyProject (ParsedProject { ProjectName = name; Root = root ; Version = v
 
     match sortResult with
     | Some sortedModules ->
+        let (stdlib: TCModule) =
+            { DocComments = None
+              Bindings = []
+              ExportMap = Map(stdlibExports)
+              Imports = [] }
+
         let blah acc (path, module') =
             match acc with
             | Ok envs ->
                 Unify.unifyModule path module' envs
                 |> Result.map (fun e -> Map.add path e envs)
-            | _ ->
-                acc
+            | _ -> acc
+
         printfn "%O" (List.map ((relativePath root) << fst) sortedModules)
-        List.fold blah (Ok(Map ["/pkgs/stdlib", Env.defaultEnv])) sortedModules
-        |> Result.mapError (fun e -> BuildTypeError [e])
-    | None ->
-        Error BuildImportError
+
+        List.fold blah (Ok(Map [ "/pkgs/stdlib", stdlib ])) sortedModules
+        |> Result.mapError (fun e -> BuildTypeError [ e ])
+    | None -> Error BuildImportError
 
 let generateIR proj =
     printPhase "Generating IR"
@@ -178,7 +198,7 @@ let writeToDisk proj =
 
 let linkAndCompile proj =
     printPhase "Compiling executable"
-    Ok ()
+    Ok()
 
 let build optPath =
     let buildResult =

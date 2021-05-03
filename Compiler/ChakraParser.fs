@@ -18,6 +18,7 @@ let chakraExpr, chakraExprRef =
 let chakraExprList, chakraExprListRef =
     createParserForwardedToRef<ChakraExprList> ()
 
+let moduleName = ref ""
 
 (* Comments *)
 
@@ -25,24 +26,24 @@ let semi = pstring ";" <?> "semicolon"
 
 let notNewline =
     satisfy (fun c -> c <> '\n') "not a newline"
+
+let newline = pchar '\n'
+
 (*
     A line comment looks like this:
 
     ```chakra
-    x = 1 ; This is a comment
     ```
+    x = 1 ; This is a comment
 
     It starts with a semicolon followed by a space, and
     continues to the end of the line
 *)
-let newline = pchar '\n'
-
 let lineComment =
-    semi
-    >>. many notNewline
-    .>> newline
-    >>% '\n'
+    semi >>. many notNewline .>> newline >>% '\n'
     <?> "Line comment"
+
+let cleanLine (s: string) = s.TrimStart([| ' ' |])
 
 (*
     A doc comment looks like this:
@@ -58,13 +59,9 @@ let lineComment =
     Any number of such lines may appear in sequence at the top of a module, or
     above any top level binding
 *)
-let cleanLine (s: string) = s.TrimStart([| ' ' |])
-
 let docComment =
     let docCommentLine =
-        (semi .>>. semi)
-        >>. many notNewline
-        .>> newline
+        (semi .>>. semi) >>. many notNewline .>> newline
         |>> charListToStr
         |>> cleanLine
 
@@ -78,9 +75,10 @@ let lineWhitespace =
     many (satisfy (fun c -> Char.IsWhiteSpace c && c <> '\n') "line whitespace")
 
 let deadspace =
-    many1
-        ((lineWhitespace >>. lineComment)
-         <|> (lineWhitespace >>. newline))
+    many1 (
+        (lineWhitespace >>. lineComment)
+        <|> (lineWhitespace >>. newline)
+    )
     .>> lineWhitespace
     <?> "deadspace"
 
@@ -91,77 +89,60 @@ let deadOrWhitespace = deadspace <|> whitespace1
 let altSigil = pchar '%'
 
 let leftParen =
-    pchar '('
-    .>> opt deadOrWhitespace
+    pchar '(' .>> opt deadOrWhitespace
     <?> "left parenthesis"
 
 let structStart =
-    altSigil
-    .>> leftParen
-    .>> opt deadOrWhitespace
+    altSigil .>> leftParen .>> opt deadOrWhitespace
     <?> "start of struct"
 
 let rightParen =
     whitespace >>. pchar ')' <?> "right parenthesis"
 
 let leftBracket =
-    pchar '['
-    .>> opt deadOrWhitespace
+    pchar '[' .>> opt deadOrWhitespace
     <?> "left bracket"
 
 let mapStart =
-    altSigil
-    .>> pchar '['
-    .>> opt deadOrWhitespace
+    altSigil .>> pchar '[' .>> opt deadOrWhitespace
     <?> "start of map"
 
 let rightBracket =
     whitespace >>. pchar ']' <?> "right bracket"
 
 let leftCurly =
-    pchar '{'
-    .>> opt deadOrWhitespace
+    pchar '{' .>> opt deadOrWhitespace
     <?> "left curly brace"
 
 let rightCurly =
     whitespace >>. pchar '}' <?> "right curly brace"
 
 let matchOperator =
-    whitespace1
-    >>. pchar '?'
-    .>> deadspace
+    whitespace1 >>. pchar '?' .>> deadspace
     <?> "match operator"
 
 let patternSep =
     pchar '|' .>> whitespace1 <?> "pattern separator"
 
 let patternArrow =
-    whitespace1
-    >>. pstring "->"
-    .>> deadOrWhitespace
+    whitespace1 >>. pstring "->" .>> deadOrWhitespace
     <?> "pattern arrow"
 
 let rawEqual = pchar '=' <?> "equal sign"
 
 let equal =
-    whitespace1
-    >>. pchar '='
-    .>> deadOrWhitespace
+    whitespace1 >>. pchar '=' .>> deadOrWhitespace
     <?> "bind operator"
 
 let pipe =
     pchar '|' .>>. whitespace1 <?> "pattern separator"
 
 let arrow =
-    whitespace1
-    .>>. pstring "->"
-    .>> deadOrWhitespace
+    whitespace1 .>>. pstring "->" .>> deadOrWhitespace
     <?> "pattern arrow"
 
 let questionMark =
-    whitespace1
-    .>>. pchar '?'
-    .>>. deadspace
+    whitespace1 .>>. pchar '?' .>>. deadspace
     <?> "match separator"
 
 
@@ -188,8 +169,7 @@ let pBaseIdentifier =
     let dash = pchar '-'
 
     let segment =
-        upperOrLowerAlpha
-        .>>. many lowerAlpha
+        upperOrLowerAlpha .>>. many lowerAlpha
         <?> "identifier segment"
 
     let questionOrBangOrStar =
@@ -212,8 +192,7 @@ let pBaseIdentifier =
         firstSegment + segmentPart + signPart
 
 
-    segment
-    <?> "identifier first segment"
+    segment <?> "identifier first segment"
     .>>. many (dash .>>. segment)
     <?> "identifier ongoing segments"
     .>>. opt questionOrBangOrStar
@@ -225,18 +204,17 @@ let pVar =
     .>>. opt (many1 (pchar '.' >>. pBaseIdentifier))
 
 let chakraVar =
-    pVar
-    |>> ChakraVar
-    <?> "valid identifier"
+    pVar |>> ChakraVar <?> "valid identifier"
 
-let pSymbol =
-    pchar '#'
-    >>. pBaseIdentifier
+let pSymbol = pchar '#' >>. pBaseIdentifier
 
-let chakraSymbol =
-    pSymbol
-    |>> ChakraSymbol
-    <?> "symbol"
+let createSymbol (str: string) =
+    if System.Char.IsUpper((str.ToCharArray()).[0]) then
+        ChakraSymbol(sprintf "%s/%s" !moduleName str)
+    else
+        ChakraSymbol str
+
+let chakraSymbol = pSymbol |>> createSymbol <?> "symbol"
 
 let (|>?) opt f =
     match opt with
@@ -273,8 +251,7 @@ let pNumber =
     let optPlusMinus = opt (pchar '-' <|> pchar '+')
 
     let nonZeroInt =
-        digitOneNine
-        .>>. manyChars digit
+        digitOneNine .>>. manyChars digit
         |>> fun (first, rest) -> string first + rest
 
     let intPart = zero <|> nonZeroInt
@@ -318,35 +295,27 @@ let pValidChars =
 
         let convertToChar (((h1, h2), h3), h4) =
             let str = sprintf "%c%c%c%c" h1 h2 h3 h4
+
             Int32.Parse(str, Globalization.NumberStyles.HexNumber)
             |> char
 
-        backslash
-        >>. uChar
-        >>. hexdigit
+        backslash >>. uChar >>. hexdigit
         .>>. hexdigit
         .>>. hexdigit
         .>>. hexdigit
         |>> convertToChar
         <?> "unicode character"
 
-    unescapedChar
-    <|> escapedChar
-    <|> unicodeChar
+    unescapedChar <|> escapedChar <|> unicodeChar
     <?> "valid string characters"
 
-let chakraNumber =
-    pNumber
-    |>> ChakraNumber
+let chakraNumber = pNumber |>> ChakraNumber
 
 let pCString =
     between pdoublequote (many pValidChars) pdoublequote
     |>> charListToStr
 
-let chakraString =
-    pCString
-    |>> ChakraString
-    <?> "string"
+let chakraString = pCString |>> ChakraString <?> "string"
 
 let pIgnore = pchar '_' <?> "ignore"
 
@@ -365,14 +334,15 @@ let container start end' item =
     between start items end'
 
 let spread =
-    pstring "..."
-    >>. pBaseIdentifier
-    |> withSpan
+    pstring "..." >>. pBaseIdentifier |> withSpan
 
 let spreadableContainer start end' item =
     let items =
         sepBy1 item (containerItemSeparator .>> deadOrWhitespace)
-        .>>. opt (containerItemSeparator .>> deadOrWhitespace >>. spread)
+        .>>. opt (
+            containerItemSeparator .>> deadOrWhitespace
+            >>. spread
+        )
         .>> opt containerItemSeparator
         .>> opt deadOrWhitespace
 
@@ -382,25 +352,27 @@ let pTuple item =
     let emptyTuple =
         (emptyContainer leftParen rightParen) >>% []
 
-    let nonEmptyTuple =
-        (container leftParen rightParen item)
+    let nonEmptyTuple = (container leftParen rightParen item)
 
     emptyTuple <|> nonEmptyTuple
 
-let chakraTuple = pTuple chakraExpr |>> ChakraTuple <?> "tuple"
+let chakraTuple =
+    pTuple chakraExpr |>> ChakraTuple <?> "tuple"
 
-let pStruct start (value: Parser<'a>) (pairConstructor: (Span * (String * 'a) -> 'b)) (punnedConstructor: (Span * string) -> 'b) =
+let pStruct
+    start
+    (value: Parser<'a>)
+    (pairConstructor: (Span * (String * 'a) -> 'b))
+    (punnedConstructor: (Span * string) -> 'b)
+    =
     let structPair =
         let regularPair =
-            pBaseIdentifier .>> equal .>>. value
-            |> withSpan
+            pBaseIdentifier .>> equal .>>. value |> withSpan
             |>> pairConstructor
 
 
         let punned =
-            pBaseIdentifier
-            |> withSpan
-            |>> punnedConstructor
+            pBaseIdentifier |> withSpan |>> punnedConstructor
 
         (regularPair <|> punned)
 
@@ -408,9 +380,15 @@ let pStruct start (value: Parser<'a>) (pairConstructor: (Span * (String * 'a) ->
 
 let chakraStruct =
     let punnedPairConstructor (span, id) =
-        { Loc = span ; Name = id ; Value = ChakraLiteralExpr (span, ChakraVar (id, None)) }
+        { Loc = span
+          Name = id
+          Value = ChakraLiteralExpr(span, ChakraVar(id, None)) }
+
     let createPair (span, (name, value)) =
-        { Loc = span; Name = name; Value = value}
+        { Loc = span
+          Name = name
+          Value = value }
+
     let createStruct (pairs, spread) =
         ChakraStruct { Fields = pairs; Spread = spread }
 
@@ -421,7 +399,7 @@ let chakraStruct =
 let pCList item =
     let emptyList =
         emptyContainer leftBracket rightBracket
-        >>%  ([], None)
+        >>% ([], None)
         <?> "empty list"
 
     let nonEmptyList =
@@ -434,14 +412,11 @@ let chakraList =
     let createList (items, spread) =
         ChakraList { Items = items; Spread = spread }
 
-    pCList chakraExpr
-    |>> createList
-    <?> "list"
+    pCList chakraExpr |>> createList <?> "list"
 
 let pMap createPair key value =
     let mapPair =
-        (key .>> equal) .>>. value
-        |> withSpan
+        (key .>> equal) .>>. value |> withSpan
         |>> createPair
 
     let nonEmptyMap =
@@ -455,7 +430,7 @@ let pMap createPair key value =
 
 let chakraMap =
     let createPair (span, (key, value)) =
-        { Loc = span ; Key = key; Value = value}
+        { Loc = span; Key = key; Value = value }
 
 
     let createMap (pairs, spread) =
@@ -464,59 +439,49 @@ let chakraMap =
     pMap createPair chakraLiteral chakraExpr
     |>> createMap
 
-
 let chakraLambda =
     let stringTuple =
         container leftParen rightParen pBaseIdentifier
 
     let createRecord (args, body) = { Args = args; Body = body }
+
     between leftCurly (stringTuple .>> arrow .>>. chakraExprList) rightCurly
     |>> createRecord
     |>> ChakraLambda
 
 (* Patterns *)
+
 let flattenTuple (a, (b, c)) = (a, b, c)
 
 let tossRight (l, r) = l
 
 let cpIgnore =
-    pIgnore
-    |> withSpan
-    |>> tossRight
-    |>> CPIgnore
+    pIgnore |> withSpan |>> tossRight |>> CPIgnore
 
-let cpVar =
-    pBaseIdentifier
-    |> withSpan
-    |>> CPVar
+let cpVar = pBaseIdentifier |> withSpan |>> CPVar
 
-let cpNumber = 
-    pNumber
-    |> withSpan
-    |>> CPNumber
+let cpNumber = pNumber |> withSpan |>> CPNumber
 
-let cpSymbol =
-    pSymbol
-    |> withSpan
-    |>> CPSymbol
+let cpSymbol = pSymbol |> withSpan |>> CPSymbol
 
-let cpString =
-    pCString
-    |> withSpan
-    |>> CPString
+let cpString = pCString |> withSpan |>> CPString
 
 let cpTuple =
-    pTuple chakraPattern
-    |> withSpan
-    |>> CPTuple
+    pTuple chakraPattern |> withSpan |>> CPTuple
 
 let cpStruct =
     let punnedPairConstructor (span, id) =
-        { Loc = span ; Name = id ; ValuePattern = CPVar (span, id)}
+        { Loc = span
+          Name = id
+          ValuePattern = CPVar(span, id) }
+
     let createPair (span, (name, value)) =
-        { Loc = span; Name = name; ValuePattern = value}
+        { Loc = span
+          Name = name
+          ValuePattern = value }
+
     let createStruct (span, (pairs, (rest: bool))) =
-        CPStruct (span, { Fields = pairs; Rest = rest })
+        CPStruct(span, { Fields = pairs; Rest = rest })
 
     let item =
         let regularPair =
@@ -527,49 +492,42 @@ let cpStruct =
 
 
         let punned =
-            pBaseIdentifier
-            |> withSpan
+            pBaseIdentifier |> withSpan
             |>> punnedPairConstructor
             <?> "punned struct pair"
 
-        (regularPair <|> punned)
-        <?> "struct pair"
+        (regularPair <|> punned) <?> "struct pair"
 
-    let sep = containerItemSeparator .>> deadOrWhitespace <?> "struct pair separator"
+    let sep =
+        containerItemSeparator .>> deadOrWhitespace
+        <?> "struct pair separator"
 
     let form =
-        (structStart
-        >>. sepBy1 item sep
-        .>> rightParen
-        |>> fun (is) -> (is, false)
-        <?> "regular struct")
-        <|>
-        (structStart
-        >>. sepBy1 item sep
-        .>> sep 
-        .>> (pstring "...)" <?> "rest operator")
-        |>> (fun (is) -> (is, true))
-        <?> "struct with rest")
+        (structStart >>. sepBy1 item sep .>> rightParen
+         |>> fun is -> (is, false)
+         <?> "regular struct")
+        <|> (structStart >>. sepBy1 item sep
+             .>> sep
+             .>> (pstring "...)" <?> "rest operator")
+             |>> (fun is -> (is, true))
+             <?> "struct with rest")
 
-    form
-    |> withSpan
-    |>> createStruct
-    <?> "struct"
+    form |> withSpan |>> createStruct <?> "struct"
 
 let cpList =
     let createList (span, (items, spread)) =
-        CPList (span, {Items = items ; Rest = spread})
+        CPList(span, { Items = items; Rest = spread })
 
-    pCList chakraPattern
-    |> withSpan
-    |>> createList
+    pCList chakraPattern |> withSpan |>> createList
 
 let cpMap =
     let createPair (span, (key, value)) =
-        { Loc = span ; KeyPattern = key ; ValuePattern = value }
+        { Loc = span
+          KeyPattern = key
+          ValuePattern = value }
 
     let createMap (span, (pairs, spread)) =
-        CPMap (span, { Pairs = pairs; Rest = spread })
+        CPMap(span, { Pairs = pairs; Rest = spread })
 
     pMap createPair chakraPattern chakraPattern
     |> withSpan
@@ -588,11 +546,10 @@ let chakraOrderedApply =
 
 let chakraNamedApply =
     let pc (span, id) =
-        (span, (id, ChakraLiteralExpr (span, ChakraVar (id, None))))
-    let createPair (span, (name, value)) =
-        (span, (name, value))
-    let createApply ((name, path), (pairs, spread)) =
-        ChakraNamedApply ((name, path), pairs)
+        (span, (id, ChakraLiteralExpr(span, ChakraVar(id, None))))
+
+    let createPair (span, (name, value)) = (span, (name, value))
+    let createApply ((name, path), (pairs, spread)) = ChakraNamedApply((name, path), pairs)
 
     pBaseIdentifier
     .>>. many (pchar '.' >>. pBaseIdentifier)
@@ -600,7 +557,9 @@ let chakraNamedApply =
     |>> createApply
     <?> "named application"
 
-let chakraApply = chakraOrderedApply <|> chakraNamedApply <?> "function applicationS"
+let chakraApply =
+    chakraOrderedApply <|> chakraNamedApply
+    <?> "function applicationS"
 
 let chakraMatchClause =
     // We need to be able to parse other forms to make literals
@@ -628,16 +587,13 @@ let chakraMatchClause =
     //
     // Lists like:
     // [ a _ c ...rest ] ; binding to some elements, ignoring others, collecting the tail
-    pipe
-    >>. chakraPattern
-    .>> arrow
+    pipe >>. chakraPattern .>> arrow
     .>>. chakraExprList
     |>> ChakraMatchClause
     <?> "match clause"
 
 let chakraMatch =
-    chakraLiteral
-    .>> questionMark
+    chakraLiteral .>> questionMark
     .>>. sepBy1 chakraMatchClause deadspace
     |>> ChakraMatch
     <?> "match"
@@ -647,18 +603,20 @@ let pPipe = pchar '>'
 
 let chakraPipe =
     let pipeStep =
-        pPipe >>. many1 (pchar ' ') >>. withSpan chakraApply
-    ((chakraLiteral |>> ChakraPipeLiteralHead) <|> (chakraApply |>> ChakraPipeApplyHead))
+        pPipe
+        >>. many1 (pchar ' ')
+        >>. withSpan chakraApply
+
+    ((chakraLiteral |>> ChakraPipeLiteralHead)
+     <|> (chakraApply |>> ChakraPipeApplyHead))
     .>> deadspace
     .>>. sepBy1 pipeStep deadspace
     |> withSpan
-    |>> fun (span, (head, tail)) ->
-        { Loc = span ; Head = head ; Tail = tail}
+    |>> fun (span, (head, tail)) -> { Loc = span; Head = head; Tail = tail }
 
 let chakraBindingPattern =
     let simple =
-        pBaseIdentifier
-        |>> ChakraSimpleBindingPattern
+        pBaseIdentifier |>> ChakraSimpleBindingPattern
         <?> "simple binding pattern"
 
     let func =
@@ -668,8 +626,7 @@ let chakraBindingPattern =
         <?> "function binding pattern"
 
     let complex =
-        chakraPattern
-        |>> ChakraComplexBindingPattern
+        chakraPattern |>> ChakraComplexBindingPattern
         <?> "destructured binding pattern"
 
     func <|> simple <|> complex <?> "binding pattern"
@@ -679,53 +636,41 @@ let rec chakraBinding =
         { Loc = s
           Pattern = b
           ExprList = e
-          DocComment = None}
+          DocComment = None }
 
-    chakraBindingPattern
-    .>> equal
-    .>>. chakraExprList
+    chakraBindingPattern .>> equal .>>. chakraExprList
     |> withSpan
     |>> createBinding
     <?> "Binding"
 
 let chakraLiteralExpr =
-    chakraLiteral
-    |> withSpan
-    |>> ChakraLiteralExpr
+    chakraLiteral |> withSpan |>> ChakraLiteralExpr
     <?> "literal expression"
 
 let chakraApplyExpr =
-    chakraApply
-    |> withSpan
-    |>> ChakraApplyExpr
+    chakraApply |> withSpan |>> ChakraApplyExpr
     <?> "function application"
 
 
 let chakraMatchExpr =
-    chakraMatch
-    |> withSpan
-    |>> ChakraMatchExpr
+    chakraMatch |> withSpan |>> ChakraMatchExpr
     <?> "match expression"
 
 let chakraPipeExpr =
-    chakraPipe
-    |>> ChakraPipeExpr
+    chakraPipe |>> ChakraPipeExpr
     <?> "Pipe expression"
 
 (* Imports *)
 
 let pRootImport =
-    pstring "/root"
-    >>. pchar '/'
-    >>. pBaseIdentifier
+    pstring "/root" >>. pchar '/' >>. pBaseIdentifier
     <?> "Root import"
 
 let pPackageImport =
     pchar '/' >>. pBaseIdentifier <?> "Package import"
 
 let pRelativeImport =
-    pstring "./"
-    >>. pBaseIdentifier
+    pstring "./" >>. pBaseIdentifier
     <?> "Relative import"
 
 let pImportDestructuring =
@@ -765,13 +710,9 @@ let chakraImport =
     let eq = (pchar ' ' .>> pchar '=' .>> pchar ' ')
 
     (binding .>> eq .>>. pRootImport |>> rootImport)
-    <|> (binding
-         .>> eq
-         .>>. pPackageImport
+    <|> (binding .>> eq .>>. pPackageImport
          |>> packageImport)
-    <|> (binding
-         .>> eq
-         .>>. pRelativeImport
+    <|> (binding .>> eq .>>. pRelativeImport
          |>> relativeImport)
     <?> "import"
 
@@ -781,12 +722,12 @@ let chakraModuleDef =
     let tupleLike =
         container structStart rightParen pBaseIdentifier
 
-    rawEqual
-    .>> pchar ' '
-    >>. tupleLike
+    rawEqual .>> pchar ' ' >>. tupleLike
     <?> "Module export definition"
 
-let chakraModule =
+let chakraModule modName =
+    moduleName := modName
+
     let possibleImportSection =
         sepBy chakraImport (deadspace) <?> "imports"
 
@@ -803,13 +744,13 @@ let chakraModule =
 
     let topLevelBindings =
         let content ({ Content = c; IsDoc = _ }) = c
+
         let createBinding (optComment, binding) =
-                { binding with
-                    DocComment = Option.map (content) optComment }
+            { binding with
+                  DocComment = Option.map (content) optComment }
 
         let b =
-            opt docComment
-            .>>. chakraBinding
+            opt docComment .>>. chakraBinding
             |>> createBinding
             <?> "top level binding"
 
@@ -817,8 +758,7 @@ let chakraModule =
 
     let t = returnP []
 
-    (opt docComment)
-    .>>. chakraModuleDef
+    (opt docComment) .>>. chakraModuleDef
     <?> "Module definition"
     .>> deadspace
     <?> "significant newlines"
@@ -836,14 +776,13 @@ let chakraModule =
 (* Metadata *)
 
 let chakraMetdata =
+    moduleName := "METADATA"
+
     let metadataBinding =
-        pBaseIdentifier
-        .>> equal
-        .>>. chakraLiteral
+        pBaseIdentifier .>> equal .>>. chakraLiteral
         <?> "Metadata binding"
 
-    rawEqual
-    .>> whitespace1
+    rawEqual .>> whitespace1
     >>. structStart
     >>. sepBy1 metadataBinding (comma .>> deadOrWhitespace)
     .>> opt (comma .>> deadOrWhitespace)
@@ -863,7 +802,7 @@ chakraPatternRef
             cpStruct
             cpMap
             cpIgnore ]
-<?> "pattern"
+   <?> "pattern"
 
 chakraLiteralRef
 := choice [ chakraVar
@@ -875,19 +814,19 @@ chakraLiteralRef
             chakraStruct
             chakraMap
             chakraLambda ]
-<?> "literal"
+   <?> "literal"
 
 chakraExprRef
 := choice [ chakraPipeExpr
             chakraApplyExpr
             chakraMatchExpr
             chakraLiteralExpr ]
-<?> "expression"
+   <?> "expression"
 
 chakraExprListRef
 := many (chakraBinding .>> deadspace)
-<?> "expression list bindings"
-.>>. chakraExpr
-<?> "expression list expression"
-|>> ChakraExprList
-<?> "expression list"
+   <?> "expression list bindings"
+   .>>. chakraExpr
+   <?> "expression list expression"
+   |>> ChakraExprList
+   <?> "expression list"

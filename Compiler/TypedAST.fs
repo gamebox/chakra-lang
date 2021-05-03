@@ -57,14 +57,19 @@ and TCLiteral =
     member x.Typ =
         match x with
         | TCVar (_, t) -> t
-        | TCNumber (d) -> num
-        | TCSymbol (string) -> 
-        | TCString (string) -> str
-        | TCTuple (exprs) -> tup (List.map (fun x -> x.Typ) exprs)
-        | TCStruct (s) -> 
-        | TCList (l) ->
-        | TCMap (m) ->
-        | TCLambda (l) ->
+        | TCNumber _ -> num
+        | TCSymbol (string) -> SymbolType string
+        | TCString _ -> str
+        | TCTuple exprs -> exprs |> List.map (fun x -> x.Typ) |> tup
+        | TCStruct (s) ->
+            let fields =
+                (List.map (fun f -> (f.Name, f.TValue.Typ)) s.Fields)
+
+            strct (fields, (s.Spread.IsSome), None)
+
+        | TCList p -> p.Typ
+        | TCMap (m) -> map m.KeyType m.ValueType
+        | TCLambda (l) -> fn (List.map (fun a -> (a.ArgName, a.Typ)) l.Args) l.Body.Typ
 
 and TCStructField =
     { Loc: Span
@@ -82,15 +87,21 @@ and TCMapPair =
 
 and TCMap =
     { Pairs: TCMapPair list
-      Spread: (Span * string) option }
+      Spread: (Span * string) option
+      KeyType: Type
+      ValueType: Type }
 
 and TCList =
     { Items: TCExpr list
-      Spread: (Span * string) option}
+      Spread: (Span * string) option
+      Typ: Type }
 
-and TCLambda =
-    { Args: string list
-      Body: TCExprList }
+and TCArg =
+    { Loc: Span
+      ArgName: string
+      Typ: Type }
+
+and TCLambda = { Args: TCArg list; Body: TCExprList }
 
 and TCMatch = TCMatch of (TCLiteral * Type * TCMatchClause list)
 
@@ -122,7 +133,7 @@ and TCExpr =
         | TCLiteralExpr (_, lit) -> lit.Typ
         | TCMatchExpr (_, t, _) -> t
         | TCApplyExpr (_, t, _) -> t
-        | TCPipeExpr { Typ = t } -> t
+        | TCPipeExpr pipe -> pipe.Typ
         | TCNativeExpr (_, t) -> t
 
 and TCApply =
@@ -146,8 +157,7 @@ type TCModule =
       Imports: ChakraImport list }
 
 
-let tcModuleAsStruct { ExportMap = es } =
-    strct (Map.toList es, false, None)
+let tcModuleAsStruct { ExportMap = es } = strct (Map.toList es, false, None)
 
 
 let tcModule (cmod: ChakraModule) exports bs =
