@@ -58,18 +58,21 @@ and TCLiteral =
         match x with
         | TCVar (_, t) -> t
         | TCNumber _ -> num
-        | TCSymbol (string) -> SymbolType string
+        | TCSymbol string -> SymbolType string
         | TCString _ -> str
         | TCTuple exprs -> exprs |> List.map (fun x -> x.Typ) |> tup
-        | TCStruct (s) ->
+        | TCStruct { Fields = fs; Spread = s } ->
             let fields =
-                (List.map (fun f -> (f.Name, f.TValue.Typ)) s.Fields)
+                List.map (fun f -> (f.Name, f.TValue.Typ)) fs
 
-            strct (fields, (s.Spread.IsSome), None)
-
+            strct (fields, s.IsSome, None)
         | TCList p -> p.Typ
-        | TCMap (m) -> map m.KeyType m.ValueType
-        | TCLambda (l) -> fn (List.map (fun a -> (a.ArgName, a.Typ)) l.Args) l.Body.Typ
+        | TCMap m -> map m.KeyType m.ValueType
+        | TCLambda l ->
+            let args =
+                List.map (fun a -> (a.ArgName, a.Typ)) l.Args
+
+            fn args l.Body.Typ
 
 and TCStructField =
     { Loc: Span
@@ -156,9 +159,7 @@ type TCModule =
       Bindings: TCBinding list
       Imports: ChakraImport list }
 
-
 let tcModuleAsStruct { ExportMap = es } = strct (Map.toList es, false, None)
-
 
 let tcModule (cmod: ChakraModule) exports bs =
     { DocComments = cmod.DocComments
