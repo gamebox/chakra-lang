@@ -31,7 +31,6 @@ type Type =
     | StringType
     | NumberType
     | SymbolType of string
-    | LiteralType of ChakraLiteral
     | TupleType of Type list
     | ListType of Type
     | MapType of key: Type * value: Type
@@ -56,7 +55,6 @@ let gSym = SymbolType
 let mSym s moduleName =
     SymbolType(sprintf "%s/%s" moduleName s)
 
-let lit = LiteralType
 let tup = TupleType
 let list = ListType
 let map k v = MapType(k, v)
@@ -78,4 +76,4 @@ let bool = union [ gSym "true"; gSym "false" ]
 
 let opt t =
     union [ (gSym "none")
-            tup [ lit (ChakraSymbol "some"); t ] ]
+            tup [ SymbolType "some"; t ] ]

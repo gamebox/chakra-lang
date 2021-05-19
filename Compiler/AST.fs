@@ -55,17 +55,6 @@ type ChakraBindingPattern =
     | ChakraFunctionBindingPattern of FunctionBindPatternInfo
     | ChakraComplexBindingPattern of ChakraPattern
 
-and ChakraLiteral =
-    | ChakraVar of (string * (string list) option)
-    | ChakraNumber of Decimal
-    | ChakraSymbol of string
-    | ChakraString of string
-    | ChakraTuple of ChakraExpr list
-    | ChakraStruct of ChakraStruct
-    | ChakraList of ChakraList
-    | ChakraMap of ChakraMap
-    | ChakraLambda of ChakraLambda
-
 and ChakraStructField =
     { Loc: Span
       Name: string
@@ -77,7 +66,7 @@ and ChakraStruct =
 
 and ChakraMapPair =
     { Loc: Span
-      Key: ChakraLiteral
+      Key: ChakraExpr
       Value: ChakraExpr }
 
 and ChakraMap =
@@ -92,7 +81,7 @@ and ChakraLambda =
     { Args: string list
       Body: ChakraExprList }
 
-and ChakraMatch = ChakraMatch of (ChakraLiteral * ChakraMatchClause list)
+and ChakraMatch = ChakraMatch of (ChakraExpr * ChakraMatchClause list)
 
 and ChakraMatchClause = ChakraMatchClause of (ChakraPattern * ChakraExprList)
 
@@ -105,7 +94,15 @@ and ChakraBinding =
 and ChakraExprList = ChakraExprList of (ChakraBinding list * ChakraExpr)
 
 and ChakraExpr =
-    | ChakraLiteralExpr of (Span * ChakraLiteral)
+    | ChakraVar of Span * (string * (string list) option)
+    | ChakraNumber of Span * Decimal
+    | ChakraSymbol of Span * string
+    | ChakraString of Span * string
+    | ChakraTuple of Span * ChakraExpr list
+    | ChakraStruct of Span * ChakraStruct
+    | ChakraList of Span * ChakraList
+    | ChakraMap of Span * ChakraMap
+    | ChakraLambda of Span * ChakraLambda
     | ChakraMatchExpr of (Span * ChakraMatch)
     | ChakraApplyExpr of (Span * ChakraApply)
     | ChakraPipeExpr of ChakraPipe
@@ -121,13 +118,9 @@ and ChakraApply =
     | ChakraApply of (ApplyIdentifier * ChakraExpr list)
     | ChakraNamedApply of (ApplyIdentifier * NamedApplyPair list)
 
-and ChakraPipeHead =
-    | ChakraPipeLiteralHead of ChakraLiteral
-    | ChakraPipeApplyHead of ChakraApply
-
 and ChakraPipe =
     { Loc: Span
-      Head: ChakraPipeHead
+      Head: ChakraExpr
       Tail: (Span * ChakraApply) list }
 
 type ChakraImportBindingType =

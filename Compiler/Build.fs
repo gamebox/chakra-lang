@@ -86,8 +86,8 @@ let projectFromMetadata projectPath =
 
     let extractMetadataFromParsed parsed =
         match (Map.tryFind "name" parsed, Map.tryFind "version" parsed) with
-        | (Some (ChakraString name), Some (ChakraString v)) -> Ok(Project(name, projectPath, v))
-        | (Some (ChakraString name), _) -> Ok(Project(name, projectPath, "0.0.1"))
+        | (Some (ChakraString (_, name)), Some (ChakraString (s, v))) -> Ok(Project(name, projectPath, v))
+        | (Some (ChakraString (_, name)), _) -> Ok(Project(name, projectPath, "0.0.1"))
         | (a, b) ->
             printfn "%O\n%O" a b
             Error BuildConfigNoNameError
@@ -152,6 +152,8 @@ let importedModules ({ Imports = imports }: ChakraModule) modulePath =
 
 let relativePath root path = Path.GetRelativePath(root, path)
 
+let annotate path m envs = Ok(tcModule m (Map.empty) [])
+
 let verifyProject
     (ParsedProject { ProjectName = name
                      Root = root
@@ -177,7 +179,8 @@ let verifyProject
         let blah acc (path, module') =
             match acc with
             | Ok envs ->
-                Unify.unifyModule path module' envs
+                // TODO: Replace this with a real annotate method in a Annotate module
+                annotate path module' envs
                 |> Result.map (fun e -> Map.add path e envs)
             | _ -> acc
 

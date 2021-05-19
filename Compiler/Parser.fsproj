@@ -14,7 +14,7 @@
     <Compile Include="ChakraParser.fs" />
     <Compile Include="Pretty.fs" />
     <Compile Include="Env.fs" />
-    <Compile Include="Unify.fs" />
+    <!-- <Compile Include="Unify.fs" /> -->
     <Compile Include="Command.fs" />
     <Compile Include="Build.fs" />
     <Compile Include="Program.fs" />

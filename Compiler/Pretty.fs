@@ -219,32 +219,30 @@ let rec shouldStayOnOneLine expr nestingLevel =
     | ChakraApplyExpr (_, ChakraApply ((_, pathSegments), exprs)) -> (pathSegments.Length + exprs.Length) < 2
     | ChakraApplyExpr (_, ChakraNamedApply ((_, pathSegments), exprs)) -> (pathSegments.Length + exprs.Length) < 2
     | ChakraMatchExpr _ -> false
-    | ChakraLiteralExpr (_, lit) ->
-        match lit with
-        | ChakraVar (s, path) -> true
-        | ChakraNumber _ -> true
-        | ChakraString s -> s.Length < 15
-        | ChakraSymbol s -> s.Length < 15
-        | ChakraLambda _ -> false
-        | ChakraTuple items ->
+    | ChakraVar (s, path) -> true
+    | ChakraNumber _ -> true
+    | ChakraString (_, s) -> s.Length < 15
+    | ChakraSymbol (_, s) -> s.Length < 15
+    | ChakraLambda _ -> false
+    | ChakraTuple (_, items) ->
+        items.Length <= 1
+        && nestingLevel = 0
+        && shouldStayOnOneLine (List.head items) (nestingLevel + 1)
+    | ChakraList (_, { Items = items; Spread = spread }) ->
+        if spread <> None then
+            false
+        else
             items.Length <= 1
             && nestingLevel = 0
             && shouldStayOnOneLine (List.head items) (nestingLevel + 1)
-        | ChakraList { Items = items; Spread = spread } ->
-            if spread <> None then
-                false
-            else
-                items.Length <= 1
-                && nestingLevel = 0
-                && shouldStayOnOneLine (List.head items) (nestingLevel + 1)
-        | ChakraStruct { Fields = fs; Spread = spread } ->
-            if spread <> None then
-                false
-            else
-                fs.Length <= 1
-                && nestingLevel = 0
-                && shouldStayOnOneLine (List.head fs).Value (nestingLevel + 1)
-        | ChakraMap _ -> false
+    | ChakraStruct (_, { Fields = fs; Spread = spread }) ->
+        if spread <> None then
+            false
+        else
+            fs.Length <= 1
+            && nestingLevel = 0
+            && shouldStayOnOneLine (List.head fs).Value (nestingLevel + 1)
+    | ChakraMap _ -> false
     | ChakraNativeExpr _ -> false
     | ChakraPipeExpr _ -> false
 
@@ -347,13 +345,10 @@ let rec showPattern (patt: ChakraPattern) =
 
 let shouldPun name value =
     match value with
-    | ChakraVar (str, None) -> name = str
+    | ChakraVar (span, (str, None)) -> name = str
     | _ -> false
 
-let shouldPunExpr name value =
-    match value with
-    | ChakraLiteralExpr (_, lit) -> shouldPun name lit
-    | _ -> false
+let shouldPunExpr name value = shouldPun name value
 
 let rec showModule (mod': ChakraModule) =
     let doc =
@@ -372,122 +367,6 @@ let rec showModule (mod': ChakraModule) =
     <&> line
     <&> line
     <&> block 0 (List.map (opWithNewline << showBinding) mod'.Bindings)
-
-and showLiteral (lit: ChakraLiteral) =
-    match lit with
-    | ChakraVar id -> text (createFullId id)
-    | ChakraNumber num -> text (sprintf "%M" num)
-    | ChakraSymbol s -> text (sprintf "#%s" s)
-    | ChakraString s -> text (sprintf "\"%s\"" s)
-    | ChakraTuple [] -> text "()"
-    | ChakraTuple [ item ] ->
-        if shouldStayOnOneLine item 0 then
-            TextOp "( " <&> showExpr item <&> TextOp " )"
-        else
-            text "("
-            <&> (block 1 (List.map (opWithComma << showExpr) [ item ]))
-            <&> line
-            <&> text ")"
-    | ChakraTuple items ->
-        text "("
-        <&> (block 1 (List.map (opWithComma << showExpr) items))
-        <&> line
-        <&> text ")"
-    | ChakraStruct { Fields = fields; Spread = spread } ->
-        let fieldOp { Name = name; Value = value } =
-            if shouldPunExpr name value then
-                text name
-            else
-                text name <+> text "=" <+> showExpr value
-
-        let spreadOps =
-            match spread with
-            | Some (_, var) -> [ text var ]
-            | _ -> []
-
-        match fields with
-        | [] ->
-            text "%("
-            <&> List.reduce (<+>) spreadOps
-            <&> text ")"
-        | [ field ] when shouldStayOnOneLine field.Value 0 -> text "%(" <+> fieldOp field <+> text ")"
-        | _ ->
-            text "%("
-            <&> block
-                    1
-                    (List.concat [ (List.map (opWithComma << fieldOp) fields)
-                                   spreadOps ])
-            <&> line
-            <&> text ")"
-    | ChakraList { Items = []; Spread = None } -> text "[" <&> text "]"
-    | ChakraList { Items = []; Spread = Some (_, var) } ->
-
-        TextOp "[ "
-        <&> (text (sprintf "...%s" var))
-        <&> TextOp " ]"
-    | ChakraList { Items = [ item ]; Spread = spread } ->
-        let itemOp = showExpr item
-
-        let spreadOps =
-            match spread with
-            | Some (_, var) -> [ text (sprintf "...%s" var) ]
-            | _ -> []
-
-        text "["
-        <&> (block 1 (List.map (opWithComma) (itemOp :: spreadOps)))
-        <&> line
-        <&> text "]"
-    | ChakraList { Items = items; Spread = spread } ->
-        let spreadOps =
-            match spread with
-            | Some (_, var) ->
-                let op = text (sprintf "...%s" var)
-                [ op ]
-            | _ -> []
-
-        text "["
-        <&> (block
-                 1
-                 (List.map
-                     (opWithComma)
-                     (List.concat [ List.map showExpr items
-                                    spreadOps ])))
-        <&> line
-        <&> text "]"
-    | ChakraMap { Pairs = pairs; Spread = spread } ->
-        let pairOp { Key = name; Value = value } =
-            showLiteral name <+> text " = "
-            <&> showExpr value
-            <&> text ","
-
-        let spreadOps =
-            match spread with
-            | Some (_, var) -> [ text var ]
-            | _ -> []
-
-        match pairs with
-        | [] ->
-            text "%["
-            <&> List.reduce (<+>) spreadOps
-            <&> text "]"
-        | [ pair ] when shouldStayOnOneLine pair.Value 0 -> text "%[" <&> pairOp pair <&> text "]"
-        | _ ->
-            text "%["
-            <&> block
-                    1
-                    (List.concat [ (List.map pairOp pairs)
-                                   spreadOps ])
-            <&> line
-            <&> text "]"
-    | ChakraLambda l ->
-        let argsOp =
-            List.reduce (<&>) (List.map (opWithComma << text) l.Args)
-
-        text "{ ("
-        <&> argsOp
-        <&> text ") ->"
-        <&> nest 1 (showExprList l.Body)
-        <&> text " }"
 
 and showMatchClause (ChakraMatchClause (lit, exprList)) = TextOp "ChakraMatchClause"
 
@@ -545,39 +424,138 @@ and showClause (ChakraMatchClause (patt, exprList)) =
 
 and showExpr (expr: ChakraExpr) =
     match expr with
-    | ChakraLiteralExpr (_, lit) -> showLiteral lit
+    | ChakraVar (_, id) -> text (createFullId id)
+    | ChakraNumber (_, num) -> text (sprintf "%M" num)
+    | ChakraSymbol (_, s) -> text (sprintf "#%s" s)
+    | ChakraString (_, s) -> text (sprintf "\"%s\"" s)
+    | ChakraTuple (_, []) -> text "()"
+    | ChakraTuple (_, [ item ]) ->
+        if shouldStayOnOneLine item 0 then
+            TextOp "( " <&> showExpr item <&> TextOp " )"
+        else
+            text "("
+            <&> (block 1 (List.map (opWithComma << showExpr) [ item ]))
+            <&> line
+            <&> text ")"
+    | ChakraTuple (span, items) ->
+        text "("
+        <&> (block 1 (List.map (opWithComma << showExpr) items))
+        <&> line
+        <&> text ")"
+    | ChakraStruct (span, { Fields = fields; Spread = spread }) ->
+        let fieldOp { Name = name; Value = value } =
+            if shouldPunExpr name value then
+                text name
+            else
+                text name <+> text "=" <+> showExpr value
+
+        let spreadOps =
+            match spread with
+            | Some (_, var) -> [ text var ]
+            | _ -> []
+
+        match fields with
+        | [] ->
+            text "%("
+            <&> List.reduce (<+>) spreadOps
+            <&> text ")"
+        | [ field ] when shouldStayOnOneLine field.Value 0 -> text "%(" <+> fieldOp field <+> text ")"
+        | _ ->
+            text "%("
+            <&> block
+                    1
+                    (List.concat [ (List.map (opWithComma << fieldOp) fields)
+                                   spreadOps ])
+            <&> line
+            <&> text ")"
+    | ChakraList (span, { Items = []; Spread = None }) -> text "[" <&> text "]"
+    | ChakraList (span, { Items = []; Spread = Some (_, var) }) ->
+
+        TextOp "[ "
+        <&> (text (sprintf "...%s" var))
+        <&> TextOp " ]"
+    | ChakraList (span, { Items = [ item ]; Spread = spread }) ->
+        let itemOp = showExpr item
+
+        let spreadOps =
+            match spread with
+            | Some (_, var) -> [ text (sprintf "...%s" var) ]
+            | _ -> []
+
+        text "["
+        <&> (block 1 (List.map (opWithComma) (itemOp :: spreadOps)))
+        <&> line
+        <&> text "]"
+    | ChakraList (span, { Items = items; Spread = spread }) ->
+        let spreadOps =
+            match spread with
+            | Some (_, var) ->
+                let op = text (sprintf "...%s" var)
+                [ op ]
+            | _ -> []
+
+        text "["
+        <&> (block
+                 1
+                 (List.map
+                     (opWithComma)
+                     (List.concat [ List.map showExpr items
+                                    spreadOps ])))
+        <&> line
+        <&> text "]"
+    | ChakraMap (span, { Pairs = pairs; Spread = spread }) ->
+        let pairOp { Key = name; Value = value } =
+            showExpr name <+> text " = "
+            <&> showExpr value
+            <&> text ","
+
+        let spreadOps =
+            match spread with
+            | Some (_, var) -> [ text var ]
+            | _ -> []
+
+        match pairs with
+        | [] ->
+            text "%["
+            <&> List.reduce (<+>) spreadOps
+            <&> text "]"
+        | [ pair ] when shouldStayOnOneLine pair.Value 0 -> text "%[" <&> pairOp pair <&> text "]"
+        | _ ->
+            text "%["
+            <&> block
+                    1
+                    (List.concat [ (List.map pairOp pairs)
+                                   spreadOps ])
+            <&> line
+            <&> text "]"
+    | ChakraLambda (span, l) ->
+        let argsOp =
+            List.reduce (<&>) (List.map (opWithComma << text) l.Args)
+
+        text "{ ("
+        <&> argsOp
+        <&> text ") ->"
+        <&> nest 1 (showExprList l.Body)
+        <&> text " }"
     | ChakraMatchExpr (_, ChakraMatch (lit, clauses)) ->
-        showLiteral lit <+> text "?"
+        showExpr lit <+> text "?"
         <&> block 0 (List.map showClause clauses)
     | ChakraApplyExpr (_, app) -> showApply app
     | ChakraPipeExpr { Head = h; Tail = t } ->
-        let head =
-            match h with
-            | ChakraPipeLiteralHead l -> showLiteral l
-            | ChakraPipeApplyHead app -> showApply app
-
         let tailFolder acc (_, app) =
             acc <&> text "> " <&> (showApply app) <&> line
 
         let tail = List.fold tailFolder line t
 
-        head <&> tail
+        (showExpr h) <&> tail
     | ChakraNativeExpr s -> TextOp(sprintf "$$NATIVE$$%s$$" s)
 
-and oneLineExpr expr =
-    match expr with
-    | ChakraLiteralExpr _ -> true
-    | _ -> false
-
 and showExprList (ChakraExprList (bs, expr)) =
-    match bs with
-    | [] when oneLineExpr expr -> showExpr expr
-    | _ ->
-        let bindingOps =
-            (List.map (opWithNewline << showBinding) bs)
+    let bindingOps =
+        (List.map (opWithNewline << showBinding) bs)
 
-        let exprOpAsList = [ (showExpr expr) ]
-        block 1 (List.concat [ bindingOps; exprOpAsList ])
+    let exprOpAsList = [ (showExpr expr) ]
+    block 1 (List.concat [ bindingOps; exprOpAsList ])
 
 and showBindingPattern (patt: ChakraBindingPattern) =
     match patt with

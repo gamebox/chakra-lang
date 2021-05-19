@@ -9,8 +9,8 @@ open AST
 let chakraPattern, chakraPatternRef =
     createParserForwardedToRef<ChakraPattern> ()
 
-let chakraLiteral, chakraLiteralRef =
-    createParserForwardedToRef<ChakraLiteral> ()
+// let chakraLiteral, chakraLiteralRef =
+//     createParserForwardedToRef<ChakraLiteral> ()
 
 let chakraExpr, chakraExprRef =
     createParserForwardedToRef<ChakraExpr> ()
@@ -204,17 +204,19 @@ let pVar =
     .>>. opt (many1 (pchar '.' >>. pBaseIdentifier))
 
 let chakraVar =
-    pVar |>> ChakraVar <?> "valid identifier"
+    pVar |> withSpan |>> ChakraVar
+    <?> "valid identifier"
 
 let pSymbol = pchar '#' >>. pBaseIdentifier
 
-let createSymbol (str: string) =
+let createSymbol (span: Span, str: string) =
     if System.Char.IsUpper((str.ToCharArray()).[0]) then
-        ChakraSymbol(sprintf "%s/%s" !moduleName str)
+        ChakraSymbol(span, (sprintf "%s/%s" !moduleName str))
     else
-        ChakraSymbol str
+        ChakraSymbol(span, str)
 
-let chakraSymbol = pSymbol |>> createSymbol <?> "symbol"
+let chakraSymbol =
+    pSymbol |> withSpan |>> createSymbol <?> "symbol"
 
 let (|>?) opt f =
     match opt with
@@ -309,13 +311,14 @@ let pValidChars =
     unescapedChar <|> escapedChar <|> unicodeChar
     <?> "valid string characters"
 
-let chakraNumber = pNumber |>> ChakraNumber
+let chakraNumber = pNumber |> withSpan |>> ChakraNumber
 
 let pCString =
     between pdoublequote (many pValidChars) pdoublequote
     |>> charListToStr
 
-let chakraString = pCString |>> ChakraString <?> "string"
+let chakraString =
+    pCString |> withSpan |>> ChakraString <?> "string"
 
 let pIgnore = pchar '_' <?> "ignore"
 
@@ -357,7 +360,8 @@ let pTuple item =
     emptyTuple <|> nonEmptyTuple
 
 let chakraTuple =
-    pTuple chakraExpr |>> ChakraTuple <?> "tuple"
+    pTuple chakraExpr |> withSpan |>> ChakraTuple
+    <?> "tuple"
 
 let pStruct
     start
@@ -382,17 +386,18 @@ let chakraStruct =
     let punnedPairConstructor (span, id) =
         { Loc = span
           Name = id
-          Value = ChakraLiteralExpr(span, ChakraVar(id, None)) }
+          Value = ChakraVar(span, (id, None)) }
 
     let createPair (span, (name, value)) =
         { Loc = span
           Name = name
           Value = value }
 
-    let createStruct (pairs, spread) =
-        ChakraStruct { Fields = pairs; Spread = spread }
+    let createStruct (span, (pairs, spread)) =
+        ChakraStruct(span, { Fields = pairs; Spread = spread })
 
     pStruct structStart chakraExpr createPair punnedPairConstructor
+    |> withSpan
     |>> createStruct
     <?> "struct"
 
@@ -409,10 +414,11 @@ let pCList item =
     (nonEmptyList <|> emptyList)
 
 let chakraList =
-    let createList (items, spread) =
-        ChakraList { Items = items; Spread = spread }
+    let createList (span, (items, spread)) =
+        ChakraList(span, { Items = items; Spread = spread })
 
-    pCList chakraExpr |>> createList <?> "list"
+    pCList chakraExpr |> withSpan |>> createList
+    <?> "list"
 
 let pMap createPair key value =
     let mapPair =
@@ -433,19 +439,20 @@ let chakraMap =
         { Loc = span; Key = key; Value = value }
 
 
-    let createMap (pairs, spread) =
-        ChakraMap { Pairs = pairs; Spread = spread }
+    let createMap (span, (pairs, spread)) =
+        ChakraMap(span, { Pairs = pairs; Spread = spread })
 
-    pMap createPair chakraLiteral chakraExpr
+    pMap createPair chakraExpr chakraExpr |> withSpan
     |>> createMap
 
 let chakraLambda =
     let stringTuple =
         container leftParen rightParen pBaseIdentifier
 
-    let createRecord (args, body) = { Args = args; Body = body }
+    let createRecord (span, (args, body)) = (span, { Args = args; Body = body })
 
     between leftCurly (stringTuple .>> arrow .>>. chakraExprList) rightCurly
+    |> withSpan
     |>> createRecord
     |>> ChakraLambda
 
@@ -546,7 +553,7 @@ let chakraOrderedApply =
 
 let chakraNamedApply =
     let pc (span, id) =
-        (span, (id, ChakraLiteralExpr(span, ChakraVar(id, None))))
+        (span, (id, ChakraVar(span, (id, None))))
 
     let createPair (span, (name, value)) = (span, (name, value))
     let createApply ((name, path), (pairs, spread)) = ChakraNamedApply((name, path), pairs)
@@ -592,8 +599,25 @@ let chakraMatchClause =
     |>> ChakraMatchClause
     <?> "match clause"
 
+let chakraApplyExpr =
+    chakraApply |> withSpan |>> ChakraApplyExpr
+    <?> "function application"
+
 let chakraMatch =
-    chakraLiteral .>> questionMark
+    let matchHeadExpr =
+        choice [ chakraVar
+                 chakraNumber
+                 chakraString
+                 chakraSymbol
+                 chakraTuple
+                 chakraList
+                 chakraStruct
+                 chakraMap
+                 chakraLambda
+                 chakraApplyExpr ]
+        <?> "Match head expression"
+
+    matchHeadExpr .>> questionMark
     .>>. sepBy1 chakraMatchClause deadspace
     |>> ChakraMatch
     <?> "match"
@@ -607,9 +631,7 @@ let chakraPipe =
         >>. many1 (pchar ' ')
         >>. withSpan chakraApply
 
-    ((chakraLiteral |>> ChakraPipeLiteralHead)
-     <|> (chakraApply |>> ChakraPipeApplyHead))
-    .>> deadspace
+    chakraExpr .>> deadspace
     .>>. sepBy1 pipeStep deadspace
     |> withSpan
     |>> fun (span, (head, tail)) -> { Loc = span; Head = head; Tail = tail }
@@ -642,15 +664,6 @@ let rec chakraBinding =
     |> withSpan
     |>> createBinding
     <?> "Binding"
-
-let chakraLiteralExpr =
-    chakraLiteral |> withSpan |>> ChakraLiteralExpr
-    <?> "literal expression"
-
-let chakraApplyExpr =
-    chakraApply |> withSpan |>> ChakraApplyExpr
-    <?> "function application"
-
 
 let chakraMatchExpr =
     chakraMatch |> withSpan |>> ChakraMatchExpr
@@ -778,17 +791,31 @@ let chakraModule modName =
 let chakraMetdata =
     moduleName := "METADATA"
 
+    let oldChakraExprRef = chakraExpr
+
+    chakraExprRef
+    := choice [ chakraNumber
+                chakraString
+                chakraSymbol
+                chakraList
+                chakraMap ]
+
     let metadataBinding =
-        pBaseIdentifier .>> equal .>>. chakraLiteral
+        pBaseIdentifier .>> equal .>>. chakraExpr
         <?> "Metadata binding"
 
-    rawEqual .>> whitespace1
-    >>. structStart
-    >>. sepBy1 metadataBinding (comma .>> deadOrWhitespace)
-    .>> opt (comma .>> deadOrWhitespace)
-    .>> rightParen
-    |>> Map
-    <?> "Metadata file"
+    let meta =
+        rawEqual .>> whitespace1
+        >>. structStart
+        >>. sepBy1 metadataBinding (comma .>> deadOrWhitespace)
+        .>> opt (comma .>> deadOrWhitespace)
+        .>> rightParen
+        |>> Map
+        <?> "Metadata file"
+
+    chakraExprRef := oldChakraExprRef
+
+    meta
 
 (* Set refs *)
 
@@ -804,7 +831,7 @@ chakraPatternRef
             cpIgnore ]
    <?> "pattern"
 
-chakraLiteralRef
+chakraExprRef
 := choice [ chakraVar
             chakraNumber
             chakraString
@@ -813,14 +840,10 @@ chakraLiteralRef
             chakraList
             chakraStruct
             chakraMap
-            chakraLambda ]
-   <?> "literal"
-
-chakraExprRef
-:= choice [ chakraPipeExpr
+            chakraLambda
             chakraApplyExpr
-            chakraMatchExpr
-            chakraLiteralExpr ]
+            chakraPipeExpr
+            chakraMatchExpr ]
    <?> "expression"
 
 chakraExprListRef
