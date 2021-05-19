@@ -9,28 +9,22 @@ open TypedAST
 let rec print typ =
     match typ with
     | UnionType types -> sprintf "< %s >" (types |> List.map print |> String.concat " | ")
-
     | SumType types -> sprintf "< %s >" (types |> List.map print |> String.concat " + ")
-
     | StringType -> "str"
-
     | NumberType -> "num"
-
-    | SymbolType info ->
-        match info with
-        | GlobalSymbol s -> sprintf "#%s" s
-        | ModuleSymbol (m, s) -> sprintf "#%s/%s" m s
-
+    | SymbolType info -> sprintf "#%s" info
     | LiteralType literal -> Pretty.pretty 80 (Pretty.showLiteral literal)
+    | ListType genericType -> sprintf "[ %s ]" (print genericType)
+    | MapType (keyType, valueType) -> sprintf "%%[ %s = %s ]" (print keyType) (print valueType)
+    | GenericType typ -> sprintf "?%s" typ
+    | CommandType -> "!"
+    | PolymorphicType t -> sprintf "@%s" t
+    | RefType t -> sprintf "&%s" (print t)
 
     | TupleType types ->
         List.map print types
         |> String.concat ", "
         |> sprintf "( %s )"
-
-    | ListType genericType -> sprintf "[ %s ]" (print genericType)
-
-    | MapType (keyType, valueType) -> sprintf "%%[ %s = %s ]" (print keyType) (print valueType)
 
     | StructType (fields, isOpen, tag) ->
         sprintf
@@ -50,19 +44,12 @@ let rec print typ =
 
         sprintf "{ %s -> %s }" argList (print retrn)
 
-    | GenericType typ -> sprintf "?%s" typ
-
     | CapabilityType cap ->
         match cap with
         | StdioCapability -> "$stdio"
         | FileReadCapability -> "$fread"
-        | FileWriteCapability -> "#fwrite"
+        | FileWriteCapability -> "$fwrite"
 
-    | CommandType -> "!"
-
-    | PolymorphicType t -> sprintf "@%s" t
-
-    | RefType t -> sprintf "&%s" (print t)
 
 
 let andThen<'T, 'TError, 'U> (res: Result<'T, 'TError>) fn : Result<'U, 'TError> = res |> Result.bind fn
@@ -184,9 +171,7 @@ and literalType (env: Env) (lit: ChakraLiteral) : Result<Env * TCLiteral, TypeEr
     match lit with
     | ChakraNumber n -> Ok(env, TCNumber n)
     | ChakraString s -> Ok(env, TCString s)
-    | ChakraSymbol sym ->
-        symbolType sym
-        |> Result.map (fun (e, t) -> (e, TCSymbol sym))
+    | ChakraSymbol sym -> Ok(env, TCSymbol sym)
     | ChakraTuple exprs ->
         collectExprTypes exprs (env, [])
         |> Result.map (fun (e, tExprs) -> e, TCTuple tExprs)
@@ -211,7 +196,12 @@ and literalType (env: Env) (lit: ChakraLiteral) : Result<Env * TCLiteral, TypeEr
 
     | ChakraList list ->
         collapseIntoType exprType env list.Items
-        |> Result.map (fun (e, t) -> (addSpreadToEnv list.Spread (ListType t) e, ListType t))
+        |> Result.map
+            (fun (e, t) ->
+                let env' =
+                    addSpreadToEnv list.Spread (ListType t) e
+
+                (env', TCList { Typ = t; Items = []; Spread = None }))
 
     | ChakraMap map when map.Pairs.Length > 0 ->
         let (keys, values) =
@@ -222,7 +212,15 @@ and literalType (env: Env) (lit: ChakraLiteral) : Result<Env * TCLiteral, TypeEr
             collapseIntoType exprType e values
             |> Result.map (fun (e', vt) -> addSpreadToEnv map.Spread (MapType(kt, vt)) e', MapType(kt, vt)))
 
-    | ChakraMap map -> Ok(env, TCMap { Pairs = []; Spread = None })
+    | ChakraMap map ->
+        Ok(
+            env,
+            TCMap
+                { Pairs = []
+                  Spread = None
+                  KeyType = genA
+                  ValueType = genB }
+        )
     | ChakraLambda l -> functionType env None l.Args l.Body
     | ChakraVar (root, None) ->
         match getTypeForBinding root env with
@@ -316,7 +314,9 @@ and matchExprType env lit clauses : Result<Env * TCExpr, TypeError> =
 
 and exprType (env: Env) (expr: ChakraExpr) : Result<Env * TCExpr, TypeError> =
     match expr with
-    | ChakraLiteralExpr (loc, lit) -> TCLiteralExpr(loc, literalType env lit)
+    | ChakraLiteralExpr (loc, lit) ->
+        literalType env lit
+        |> Result.map (fun (e, tlit) -> (e, TCLiteralExpr(loc, tlit)))
 
     | ChakraApplyExpr (_, ChakraNamedApply ((root, path), pairs)) -> namedApplyExprType env root path pairs
 
@@ -327,6 +327,7 @@ and exprType (env: Env) (expr: ChakraExpr) : Result<Env * TCExpr, TypeError> =
     | ChakraPipeExpr pipe -> desugarPipe pipe |> exprType env
 
     | ChakraNativeExpr _ -> failwith "Should never be parsing native expressions"
+
 
 
 and desugarPipe (pipe: ChakraPipe) =
@@ -550,7 +551,7 @@ and collectBindings (bindings: ChakraBinding list) env : (Env * TCBinding list) 
     List.fold handleBindingType (env, []) bindings
 
 
-and collapseIntoType<'a>
+and collapseIntoType<'a, 'b>
     (typeFn: Env -> 'a -> Result<(Env * Type), TypeError>)
     (env: Env)
     (items: 'a list)

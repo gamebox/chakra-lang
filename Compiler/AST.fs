@@ -39,18 +39,14 @@ and CPMap =
 
 and CPList =
     { Items: ChakraPattern list
-      Rest: (Span * string) option}
+      Rest: (Span * string) option }
 
 [<Struct>]
-type FunctionBindPatternInfo =
-    { Name: string
-      Args: string list }
+type FunctionBindPatternInfo = { Name: string; Args: string list }
 
 type ChakraIdentifier = ChakraIdentifier of string
 
-type ChakraComment =
-    { IsDoc: bool
-      Content: string }
+type ChakraComment = { IsDoc: bool; Content: string }
 
 /// type PatternMatchInfo =
 
@@ -90,17 +86,15 @@ and ChakraMap =
 
 and ChakraList =
     { Items: ChakraExpr list
-      Spread: (Span * string) option}
+      Spread: (Span * string) option }
 
 and ChakraLambda =
     { Args: string list
       Body: ChakraExprList }
 
-and ChakraMatch =
-    | ChakraMatch of (ChakraLiteral * ChakraMatchClause list)
+and ChakraMatch = ChakraMatch of (ChakraLiteral * ChakraMatchClause list)
 
-and ChakraMatchClause =
-    | ChakraMatchClause of (ChakraPattern * ChakraExprList)
+and ChakraMatchClause = ChakraMatchClause of (ChakraPattern * ChakraExprList)
 
 and ChakraBinding =
     { Loc: Span
@@ -108,8 +102,7 @@ and ChakraBinding =
       ExprList: ChakraExprList
       DocComment: string option }
 
-and ChakraExprList =
-    | ChakraExprList of (ChakraBinding list * ChakraExpr)
+and ChakraExprList = ChakraExprList of (ChakraBinding list * ChakraExpr)
 
 and ChakraExpr =
     | ChakraLiteralExpr of (Span * ChakraLiteral)
