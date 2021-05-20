@@ -2,6 +2,8 @@ module TypeSystem
 
 open AST
 
+[<StructuralEqualityAttribute>]
+[<StructuralComparisonAttribute>]
 type Capability =
     | StdioCapability
     | FileReadCapability
@@ -25,7 +27,8 @@ type ActorRef<'msg> = Actor of 'msg
 //     | GetRandomCommand
 //     | GetDateCommand
 
-
+[<StructuralEqualityAttribute>]
+[<StructuralComparisonAttribute>]
 type Type =
     // Concrete Types
     | StringType
