@@ -1,29 +1,27 @@
 module Annotate
 
-open AST
-open TypeSystem
+let (.>>.) res fn = Result.bind fn res
 
-type ASTNode =
-    | BindingNode of ChakraBinding
-    | ExprNode of ChakraExpr
+let populateImports imps envs =
+    Ok TypeGraph.empty
 
-type Relation =
-    | DependsOn
-    | Argument of int
-    | Parameter of int
-    | Field of string
-    | PairValue of int
-    | PairKey of int
-    | Item of int
-    | Rest
-    | Applyee
+let addBinding tg ((b: AST.ChakraBinding), i) =
+    match b.Pattern with
+    | AST.ChakraSimpleBindingPattern s ->
+        TypeGraph.addBindingNode s b tg
+    | AST.ChakraComplexBindingPattern p ->
+        tg
+    | AST.ChakraFunctionBindingPattern p ->
+        TypeGraph.addBindingNode p.Name b tg
 
-type TypeGraph =
-    { Nodes : Map<string, ASTNode>
-      UpRelations : Map<string, (Relation * string) list>
-      DownRelations : Map<string, (Relation * string) list>
-      Annotations: Map<string, Type>
-      Types : Set<Type> }
+let populateTopLevelBindings (bs: AST.ChakraBinding list) (tg: TypeGraph.TypeGraph) =
+    List.mapi (fun i b -> b, i) bs
+    |> List.fold addBinding tg
+    |> Ok
+
+
+let lowerIntoTypedAst m tg =
+    Ok (TypedAST.tcModule m (Map.empty) [])
 
 /// This function attempts to take the Untyped AST of a module, as well
 /// as the resolved export types of all modules it is dependent on and
@@ -32,6 +30,7 @@ type TypeGraph =
 /// 2. Work from the leaf nodes, down, annotating every node in the graph
 ///    with the most specific type
 /// 3. Transform the fully annotated graph into a Typed AST for the module
-let annotate moduleName m envs =
-    TypedAST.tcModule m (Map.empty) []
-    |> Ok
+let annotate moduleName (m: AST.ChakraModule) envs =
+    populateImports m.Imports envs
+    .>>. populateTopLevelBindings m.Bindings
+    .>>. lowerIntoTypedAst m
