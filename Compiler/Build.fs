@@ -7,7 +7,6 @@ open ChakraParser
 open AST
 open Pretty
 open TypedAST
-open Env
 
 
 let cleaner lines =
@@ -52,7 +51,7 @@ type ParsedProject = ParsedProject of ParsedProjectInfo
 type BuildError =
     | BuildIOError of string
     | BuildConfigNoNameError
-    | BuildParseError of (ParserLabel * ParserError * ParserPosition)
+    | BuildParseError of string * (ParserLabel * ParserError * ParserPosition)
     | BuildImportError
     | BuildTypeError of Env.TypeError list
     | BuildIRError
@@ -73,7 +72,7 @@ let parseFile fileParser file =
     run fileParser file
     |> toResult
     |> Result.map fst
-    |> Result.mapError (BuildParseError)
+    |> Result.mapError (fun e -> BuildParseError("", e))
 
 let metadataPath projectPath =
     Path.Combine [| projectPath
@@ -96,8 +95,9 @@ let projectFromMetadata projectPath =
     .>>. parseMetadata
     .>>. extractMetadataFromParsed
 
-let modName (file: string) =
+let modName (file: string) (root: string) =
     ((file.Replace('/', '.')).Replace('\\', '.'))
+    |> fun x -> x.Replace(root, "")
 
 let parseProjectFiles (Project (name, root, v)) =
     printPhase "Parsing"
@@ -122,7 +122,13 @@ let parseProjectFiles (Project (name, root, v)) =
         res
         .>>. (fun files ->
             (fileContents filePath)
-            .>>. (fun file -> (parseFile (chakraModule (modName file)) file))
+            .>>. (fun file ->
+                (parseFile (chakraModule (modName filePath root)) file)
+                |> Result.mapError
+                    (fun e ->
+                        match e with
+                        | BuildParseError (_, e') -> BuildParseError((modName filePath root), e')
+                        | _ -> e))
             |> Result.map ((consRight files) << (pair filePath)))
 
 
@@ -173,16 +179,17 @@ let verifyProject
         let (stdlib: TCModule) =
             { DocComments = None
               Bindings = []
-              ExportMap = Map(stdlibExports)
+              ExportMap = Map(Env.stdlibExports)
               Imports = [] }
 
-        let blah acc (path, module') =
+        let blah (acc: Result<Map<string, TCModule>, Env.TypeError>) (path, module') =
             match acc with
             | Ok envs ->
-                // TODO: Replace this with a real annotate method in a Annotate module
-                annotate path module' envs
+                Annotate.annotate (modName path) module' envs
                 |> Result.map (fun e -> Map.add path e envs)
-            | _ -> acc
+            | _ ->
+                printf "Skipping annotation for %s" path
+                acc
 
         printfn "%O" (List.map ((relativePath root) << fst) sortedModules)
 

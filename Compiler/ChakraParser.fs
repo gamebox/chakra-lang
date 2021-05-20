@@ -75,7 +75,7 @@ let lineWhitespace =
     many (satisfy (fun c -> Char.IsWhiteSpace c && c <> '\n') "line whitespace")
 
 let deadspace =
-    many1 (
+    many (
         (lineWhitespace >>. lineComment)
         <|> (lineWhitespace >>. newline)
     )

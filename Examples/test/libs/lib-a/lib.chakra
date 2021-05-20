@@ -1,7 +1,7 @@
 = %(
     number,
     string,
-    print
+    function
 )
 
 %(
@@ -15,76 +15,76 @@ string = ""
 
 function(a) = add(number, a)
 
-print(type) =
-    type ?
-    | #union-type(types) ->
-        types
-        > map(print)
-        > concat(" | ")
-        > format("< %s >") ; This is not a planned feature
-        ; Would desugar to
-        ; format("< %s >", concat(" | ", map(print, types)))
+; print(type) =
+;     type ?
+;     | #union-type(types) ->
+;         types
+;         > map(print)
+;         > concat(" | ")
+;         > format("< %s >") ; This is not a planned feature
+;         ; Would desugar to
+;         ; format("< %s >", concat(" | ", map(print, types)))
 
-    | #sum-type(types) ->
-        types
-        > map(print)
-        > concat(" + ")
-        > format("< %s >") ; This is not a planned feature
+;     | #sum-type(types) ->
+;         types
+;         > map(print)
+;         > concat(" + ")
+;         > format("< %s >") ; This is not a planned feature
 
-    | #string-type -> "str"
+;     | #string-type -> "str"
 
-    | #number-type -> "num"
+;     | #number-type -> "num"
 
-    | #symbol-type(info) ->
-        info ?
-        | #global-symbol(s) -> format("#%s", s)
-        | #module-symbol(m, s) -> format("#%s/%s", m, s)
+;     | #symbol-type(info) ->
+;         info ?
+;         | #global-symbol(s) -> format("#%s", s)
+;         | #module-symbol(m, s) -> format("#%s/%s", m, s)
 
-    | #literal-type(literal) -> pretty(80, showLiteral literal)
+;     | #literal-type(literal) -> pretty(80, showLiteral literal)
 
-    | #tuple-type(type) ->
-        map(print, types)
-        > concat(", ")
-        > format(" %s ")
+;     | #tuple-type(type) ->
+;         map(print, types)
+;         > concat(", ")
+;         > format(" %s ")
 
-    | #list-type(generic-type) ->
-        print(generic-type)
-        > format("[ %s ]")
+;     | #list-type(generic-type) ->
+;         print(generic-type)
+;         > format("[ %s ]")
 
-    | #map-type(key-type, value-type) ->
-        format("%%[ %s = %s ]", print(key-type), print(value-type))
+;     | #map-type(key-type, value-type) ->
+;         format("%%[ %s = %s ]", print(key-type), print(value-type))
 
-    | #struct-type(fields, is-open, tag) ->
-        open-sigil =
-            is-open ?
-            | #true -> "..."
-            | #false -> ""
+;     | #struct-type(fields, is-open, tag) ->
+;         open-sigil =
+;             is-open ?
+;             | #true -> "..."
+;             | #false -> ""
 
-        pairs =
-            fields
-            > map({ (name, type) -> format(".%s = %s", name, print(type))})
-            > concat(", ")
+;         pairs =
+;             fields
+;             > map({ (name, type) -> format(".%s = %s", name, print(type))})
+;             > concat(", ")
 
-        format("%%( %s %s)", pairs, open-sigil)
+;         format("%%( %s %s)", pairs, open-sigil)
 
-    | #function-type(args, return) ->
-        arg-list =
-            args
-            > map(compose(snd, print))
-            > concat(", ")
+;     | #function-type(args, return) ->
+;         arg-list =
+;             args
+;             > map(compose(snd, print))
+;             > concat(", ")
 
-        format("{ %s -> %s }", arg-list, print(return))
+;         format("{ %s -> %s }", arg-list, print(return))
 
-    | #generic-type(type) -> format("?%s", type)
+;     | #generic-type(type) -> format("?%s", type)
 
-    | #capability-type(cap) ->
-        cap ?
-        | #stdio-capability -> "$stdio"
-        | #file-read-capability -> "$fread"
-        | #file-write-capability -> "#fwrite"
+;     | #capability-type(cap) ->
+;         cap ?
+;         | #stdio-capability -> "$stdio"
+;         | #file-read-capability -> "$fread"
+;         | #file-write-capability -> "#fwrite"
 
-    | #command-type -> "!"
+;     | #command-type -> "!"
 
-    | #polymorphic-type(t) -> format("@%s", t)
+;     | #polymorphic-type(t) -> format("@%s", t)
 
-    | #ref-type(t) -> format("&%s", print(t))
+;     | #ref-type(t) -> format("&%s", print(t))

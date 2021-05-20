@@ -267,7 +267,7 @@ let rec showPattern (patt: ChakraPattern) =
             | CPVar (_, str) -> name = str
             | _ -> false
 
-        let fieldOp { Name = name; ValuePattern = value } =
+        let fieldOp ({ Name = name; ValuePattern = value }: CPStructField) =
             if shouldPun name value then
                 text name
             else
