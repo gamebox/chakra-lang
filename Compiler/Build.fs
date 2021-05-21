@@ -96,7 +96,7 @@ let projectFromMetadata projectPath =
     .>>. extractMetadataFromParsed
 
 let modName (file: string) (root: string) =
-    ((file.Replace('/', '.')).Replace('\\', '.'))
+    file.Replace('\\', '/')
     |> fun x -> x.Replace(root, "")
 
 let parseProjectFiles (Project (name, root, v)) =
@@ -152,7 +152,7 @@ let importedModules ({ Imports = imports }: ChakraModule) modulePath =
                     i.Library
                 else
                     sprintf "/libs/%s" i.Library
-            | ChakraPackageImport i -> sprintf "/pkgs/%s" i.PackageName)
+            | ChakraPackageImport i -> sprintf "/pkgs%s" i.PackageName)
         imports
     |> List.filter ((<>) "/pkgs/stdlib")
 
@@ -185,15 +185,15 @@ let verifyProject
         let blah (acc: Result<Map<string, TCModule>, Env.TypeError>) (path, module') =
             match acc with
             | Ok envs ->
-                Annotate.annotate (modName path) module' envs
+                Annotate.annotate path module' envs
                 |> Result.map (fun e -> Map.add path e envs)
             | _ ->
                 printf "Skipping annotation for %s" path
                 acc
 
-        printfn "%O" (List.map ((relativePath root) << fst) sortedModules)
+        printfn "%O" (List.map ((modName root) << (relativePath root) << fst) sortedModules)
 
-        List.fold blah (Ok(Map [ "/pkgs/stdlib", stdlib ])) sortedModules
+        List.fold blah (Ok(Map [ "/stdlib", stdlib ])) sortedModules
         |> Result.mapError (fun e -> BuildTypeError [ e ])
     | None -> Error BuildImportError
 

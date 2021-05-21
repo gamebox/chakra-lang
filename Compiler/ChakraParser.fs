@@ -718,7 +718,9 @@ let chakraImport =
               Relative = true }
 
     let packageImport (typ, string) =
-        ChakraPackageImport { PackageName = string; Typ = typ }
+        ChakraPackageImport
+            { PackageName = sprintf "/%s" string
+              Typ = typ }
 
     let eq = (pchar ' ' .>> pchar '=' .>> pchar ' ')
 

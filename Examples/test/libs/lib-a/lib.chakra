@@ -6,7 +6,6 @@
 
 %(
     add,
-    format
 ) = /stdlib
 
 number = 1

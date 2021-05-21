@@ -80,4 +80,5 @@ let addApplyeeNode from to' tg = addEdge from to' (Applyee) tg
 
 let addAnnotation n ty tg =
     { tg with
-          Annotations = Map.add n ty tg.Annotations }
+          Annotations = Map.add n ty tg.Annotations
+          Types = Set.add ty tg.Types }
