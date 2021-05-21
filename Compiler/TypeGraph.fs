@@ -8,6 +8,10 @@ type ASTNode =
     | ExprNode of ChakraExpr
     | ImportNode
 
+type TypedASTNode =
+    | TypedBindingNode of TypedAST.TCBinding
+    | TypedExprNode of TypedAST.TCExpr
+
 type Relation =
     | DependsOn
     | Argument of int
@@ -24,14 +28,16 @@ type TypeGraph =
       UpRelations: Map<string, (Relation * string) list>
       DownRelations: Map<string, (Relation * string) list>
       Annotations: Map<string, Type>
-      Types: Set<Type> }
+      Types: Set<Type>
+      AnnotatedNodes: Map<string, TypedASTNode> }
 
 let empty =
     { Nodes = Map.empty
       UpRelations = Map.empty
       DownRelations = Map.empty
       Annotations = Map.empty
-      Types = Set.empty }
+      Types = Set.empty
+      AnnotatedNodes = Map.empty }
 
 let private addNode id n tg =
     { tg with
@@ -79,14 +85,23 @@ let addRestNode from to' tg = addEdge from to' (Rest) tg
 let addApplyeeNode from to' tg = addEdge from to' (Applyee) tg
 
 let addAnnotation n ty tg =
-    { tg with
-          Annotations = Map.add n ty tg.Annotations
-          Types = Set.add ty tg.Types }
+    match Map.find n tg.Nodes with
+    | BindingNode b ->
+        { tg with
+              Annotations = Map.add n ty tg.Annotations
+              Types = Set.add ty tg.Types }
+    | ExprNode expr ->
+        { tg with
+              Annotations = Map.add n ty tg.Annotations
+              Types = Set.add ty tg.Types }
+    | _ -> tg
 
 
 let hasNode node { Nodes = nodes } =
     Map.tryFind node nodes
     |> Option.map (fun _ -> node)
+
+let getNodeType node { Annotations = annos } = Map.tryFind node annos
 
 (* Display *)
 

@@ -112,7 +112,15 @@ let populateTopLevelBindings (bs: AST.ChakraBinding list) (tg: TypeGraph.TypeGra
     |> Ok
 
 
-let lowerIntoTypedAst m tg = Ok(TypedAST.tcModule m (Map.empty) [])
+let lowerIntoTypedAst (m: AST.ChakraModule) (tg: TypeGraph.TypeGraph) =
+    (List.fold
+        (fun acc b ->
+            match acc with
+            | Ok exmap -> acc
+            | _ -> acc)
+        (Ok Map.empty)
+        m.Bindings)
+    |> Result.map (fun exports -> TypedAST.tcModule m exports [])
 
 /// This function attempts to take the Untyped AST of a module, as well
 /// as the resolved export types of all modules it is dependent on and
