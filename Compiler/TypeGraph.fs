@@ -82,3 +82,185 @@ let addAnnotation n ty tg =
     { tg with
           Annotations = Map.add n ty tg.Annotations
           Types = Set.add ty tg.Types }
+
+
+let hasNode node { Nodes = nodes } =
+    Map.tryFind node nodes
+    |> Option.map (fun _ -> node)
+
+(* Display *)
+
+let private mermaidClasses = "
+classDef binding fill:#009, color:#fff
+classDef expr fill:#900, color:#fff
+classDef type fill:#090, color:#fff
+    "
+
+let private mermaidLegend = "
+subgraph legend
+    LEGEND_BINDING((BINDING)):::binding
+    LEGEND_EXPR[EXPR]:::expr
+    LEGEND_TYPE[/TYPE/]:::type
+end
+    "
+
+let private firstNChars (s: string) n =
+    s.Substring(0, System.Math.Min(n, s.Length))
+
+let private mermaidNode (id, node) =
+    match node with
+    | BindingNode b -> sprintf "%s((\"%s\")):::binding" id id
+    | ExprNode e ->
+        sprintf
+            "%s[\"%s\"]:::expr"
+            id
+            ((firstNChars (Pretty.pretty 30 (Pretty.showExpr e)) 20)
+                .Replace("\"", "\\\""))
+    | ImportNode -> sprintf "%s((\"%s\")):::binding" id id
+
+let rec private mermaidPrintType typ =
+    match typ with
+    | UnionType types ->
+        sprintf
+            "< %s >"
+            (types
+             |> List.map mermaidPrintType
+             |> String.concat " | ")
+    | SumType types ->
+        sprintf
+            "< %s >"
+            (types
+             |> List.map mermaidPrintType
+             |> String.concat " + ")
+    | StringType -> "str"
+    | NumberType -> "num"
+    | SymbolType info -> sprintf "#%s" info
+    | ListType genericType -> sprintf "[ %s ]" (mermaidPrintType genericType)
+    | MapType (keyType, valueType) -> sprintf "%%[ %s = %s ]" (mermaidPrintType keyType) (mermaidPrintType valueType)
+    | GenericType typ -> sprintf "?%s" typ
+    | CommandType -> "!"
+    | PolymorphicType t -> sprintf "@%s" t
+    | RefType t -> sprintf "&%s" (mermaidPrintType t)
+
+    | TupleType types ->
+        List.map mermaidPrintType types
+        |> String.concat ", "
+        |> sprintf "( %s )"
+
+    | StructType (fields, isOpen, tag) ->
+        sprintf
+            "%%( %s %s)"
+            (fields
+             |> List.map (fun (name, typ) -> sprintf ".%s = %s" name (mermaidPrintType typ))
+             |> String.concat ", ")
+            (if isOpen then "..." else "")
+
+    | FunctionType (args, retrn) ->
+        let argList =
+            sprintf
+                "( %s )"
+                (args
+                 |> List.map (mermaidPrintType << snd)
+                 |> String.concat ", ")
+
+        sprintf "{ %s -> %s }" argList (mermaidPrintType retrn)
+
+    | CapabilityType cap ->
+        match cap with
+        | StdioCapability -> "$stdio"
+        | FileReadCapability -> "$fread"
+        | FileWriteCapability -> "$fwrite"
+
+let private mermaidCleanType (ty: string) =
+    let r (a: string) (b: string) (s: string) = s.Replace(a, b)
+
+    ty
+    |> r "(" "LEFTPAREN"
+    |> r ")" "RIGHTPAREN"
+    |> r "[" "LEFTBRACKET"
+    |> r "]" "RIGHTBRACKET"
+    |> r "{" "LEFTBRACE"
+    |> r "}" "ENDBRACE"
+    |> r "->" "ARROW"
+    |> r "<" "LEFTANGLE"
+    |> r ">" "RIGHTANGLE"
+    |> r "!" "BANG"
+    |> r "@" "AT"
+    |> r "=" "EQUAL"
+    |> r "&" "AMP"
+    |> r "%" "PERCENT"
+    |> r "," "COMMA"
+    |> r " " ""
+
+let private mermaidType (ty: TypeSystem.Type) =
+    let typ = mermaidPrintType ty
+    sprintf "%s[/\"%s\"/]:::type" (mermaidCleanType typ) typ
+
+let private mermaidRelToEdge rel =
+    match rel with
+    | DependsOn -> "-->"
+    | _ -> "-->||"
+
+let private mermaidEdge (from, (edge, to')) =
+    sprintf "%s %s %s" from (mermaidRelToEdge edge) to'
+
+let private mermaidAnnoToEdge (nodeId, ty) =
+    sprintf "%s === %s" nodeId (mermaidCleanType (mermaidPrintType ty))
+
+
+let toMermaid
+    { Nodes = nodes
+      UpRelations = rels
+      Types = tys
+      Annotations = annos }
+    (withLegend: bool)
+    =
+    let n =
+        Map.toList nodes
+        |> List.map mermaidNode
+        |> List.toSeq
+        |> String.concat "\n"
+
+    let t =
+        Set.toList tys
+        |> List.map mermaidType
+        |> List.toSeq
+        |> String.concat "\n"
+
+    let e =
+        Map.toList rels
+        |> List.map
+            (fun (id, edges) ->
+                List.map (fun e -> mermaidEdge (id, e)) edges
+                |> String.concat "\n")
+        |> List.toSeq
+        |> String.concat "\n"
+
+    let a =
+        Map.toList annos
+        |> List.map mermaidAnnoToEdge
+        |> List.toSeq
+        |> String.concat "\n"
+
+    sprintf
+        "
+```mermaid
+graph TB
+%s
+
+%s
+
+%s
+
+%s
+
+%s
+%s
+```
+    "
+        n
+        t
+        e
+        a
+        mermaidClasses
+        mermaidLegend

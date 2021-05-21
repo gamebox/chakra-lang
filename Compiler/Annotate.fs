@@ -2,6 +2,13 @@ module Annotate
 
 let (.>>.) res fn = Result.bind fn res
 
+let joinIds id ext =
+    match id with
+    | "" -> ext
+    | _ -> sprintf "%s/%s" id ext
+
+let exprId id = sprintf "%s/$" id
+
 let populateImport (envs: Map<string, TypedAST.TCModule>) tg (imp: AST.ChakraImport) =
     match imp with
     | AST.ChakraLocalImport info -> tg
@@ -36,11 +43,32 @@ let populateImports (imps: AST.ChakraImport list) (envs: Map<string, TypedAST.TC
     List.fold (populateImport envs) (TypeGraph.empty) imps
     |> Ok
 
+let popFrame (var: string) =
+    var.Split("/")
+    |> Seq.toList
+    |> List.rev
+    |> List.tail
+    |> List.rev
+    |> String.concat "/"
+
+let rec findNodeForVar var tg' =
+    match (var, TypeGraph.hasNode var tg') with
+    | (_, Some node) -> Some node
+    | ("", None) -> None
+    | (_, None) -> findNodeForVar (popFrame var) tg'
+
 let rec populateExpr bname (expr: AST.ChakraExpr) tg =
     let tg' =
-        TypeGraph.addExprNode (sprintf "%s/$" bname) expr tg
+        TypeGraph.addExprNode (exprId bname) expr tg
 
     match expr with
+    | AST.ChakraNumber (_, _) -> TypeGraph.addAnnotation (exprId bname) TypeSystem.num tg'
+    | AST.ChakraString (_, _) -> TypeGraph.addAnnotation (exprId bname) TypeSystem.str tg'
+    | AST.ChakraSymbol (_, s) -> TypeGraph.addAnnotation (exprId bname) (TypeSystem.SymbolType s) tg'
+    | AST.ChakraVar (_, (var, None)) ->
+        match findNodeForVar var tg' with
+        | Some node -> TypeGraph.addDependentNode (exprId bname) node tg'
+        | None -> tg'
     | _ -> tg'
 
 and populateExprList bname (AST.ChakraExprList (bs, expr)) tg =
@@ -50,18 +78,18 @@ and populateExprList bname (AST.ChakraExprList (bs, expr)) tg =
 and populateBinding bname tg ((b: AST.ChakraBinding), i) =
     match b.Pattern with
     | AST.ChakraSimpleBindingPattern s ->
-        let n = (sprintf "%s/%s" bname s)
+        let n = joinIds bname s
 
         TypeGraph.addBindingNode n b tg
         |> populateExprList n b.ExprList
-        |> TypeGraph.addDependentNode n (sprintf "%s/$" n)
+        |> TypeGraph.addDependentNode n (exprId n)
     | AST.ChakraComplexBindingPattern p -> tg
     | AST.ChakraFunctionBindingPattern p ->
-        let n = (sprintf "%s/%s" bname p.Name)
+        let n = joinIds bname p.Name
 
         TypeGraph.addBindingNode n b tg
         |> populateExprList n b.ExprList
-        |> TypeGraph.addDependentNode n (sprintf "%s/$" n)
+        |> TypeGraph.addDependentNode n (exprId n)
 
 let populateTopLevelBinding tg ((b: AST.ChakraBinding), i) =
     match b.Pattern with
@@ -69,9 +97,9 @@ let populateTopLevelBinding tg ((b: AST.ChakraBinding), i) =
     | AST.ChakraComplexBindingPattern p -> tg
     | AST.ChakraFunctionBindingPattern p -> TypeGraph.addBindingNode p.Name b tg
 
-let private inspect label x =
-    printf "%s\n----$$$----\n%O\n----$$$----" label x
-    x
+let private inspect label (tg: TypeGraph.TypeGraph) =
+    printf "%s\n----$$$----\n%s\n----$$$----" label (TypeGraph.toMermaid tg true)
+    tg
 
 
 let populateTopLevelBindings (bs: AST.ChakraBinding list) (tg: TypeGraph.TypeGraph) =
