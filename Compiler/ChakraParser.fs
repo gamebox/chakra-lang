@@ -834,7 +834,8 @@ chakraPatternRef
    <?> "pattern"
 
 chakraExprRef
-:= choice [ chakraVar
+:= choice [ chakraApplyExpr
+            chakraVar
             chakraNumber
             chakraString
             chakraSymbol
@@ -843,7 +844,6 @@ chakraExprRef
             chakraStruct
             chakraMap
             chakraLambda
-            chakraApplyExpr
             chakraPipeExpr
             chakraMatchExpr ]
    <?> "expression"

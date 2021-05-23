@@ -7,6 +7,7 @@ type ASTNode =
     | BindingNode of ChakraBinding
     | ExprNode of ChakraExpr
     | ImportNode
+    | ParamNode
 
 type TypedASTNode =
     | TypedBindingNode of TypedAST.TCBinding
@@ -51,6 +52,8 @@ let addExprNode id e tg = addNode id (ExprNode e) tg
 
 let addImportNode id tg = addNode id ImportNode tg
 
+let addParamNode id tg = addNode id ParamNode tg
+
 let private addEdge from to' edge tg =
     if Map.containsKey from tg.Nodes
        && Map.containsKey to' tg.Nodes then
@@ -66,35 +69,30 @@ let private addEdge from to' edge tg =
     else
         tg
 
-let addDependentNode from to' tg = addEdge from to' (DependsOn) tg
+let addDependentEdge from to' tg = addEdge from to' (DependsOn) tg
 
-let addArgumentNode from to' n tg = addEdge from to' (Argument n) tg
+let addArgumentEdge from to' n tg = addEdge from to' (Argument n) tg
 
-let addParameterNode from to' n tg = addEdge from to' (Parameter n) tg
+let addParameterEdge from to' n tg = addEdge from to' (Parameter n) tg
 
-let addFieldNode from to' s tg = addEdge from to' (Field s) tg
+let addFieldEdge from to' s tg = addEdge from to' (Field s) tg
 
-let addPairValueNode from to' n tg = addEdge from to' (PairValue n) tg
+let addPairValueEdge from to' n tg = addEdge from to' (PairValue n) tg
 
-let addPairKeyNode from to' n tg = addEdge from to' (PairKey n) tg
+let addPairKeyEdge from to' n tg = addEdge from to' (PairKey n) tg
 
-let addItemNode from to' n tg = addEdge from to' (Item n) tg
+let addItemEdge from to' n tg = addEdge from to' (Item n) tg
 
-let addRestNode from to' tg = addEdge from to' (Rest) tg
+let addRestEdge from to' tg = addEdge from to' (Rest) tg
 
-let addApplyeeNode from to' tg = addEdge from to' (Applyee) tg
+let addApplyeeEdge from to' tg = addEdge from to' (Applyee) tg
 
 let addAnnotation n ty tg =
     match Map.find n tg.Nodes with
-    | BindingNode b ->
+    | _ ->
         { tg with
               Annotations = Map.add n ty tg.Annotations
               Types = Set.add ty tg.Types }
-    | ExprNode expr ->
-        { tg with
-              Annotations = Map.add n ty tg.Annotations
-              Types = Set.add ty tg.Types }
-    | _ -> tg
 
 
 let hasNode node { Nodes = nodes } =
@@ -106,14 +104,18 @@ let getNodeType node { Annotations = annos } = Map.tryFind node annos
 (* Display *)
 
 let private mermaidClasses = "
-classDef binding fill:#009, color:#fff
+classDef binding fill:#009, color:#fff, stroke: white, stroke-width: 4px
 classDef expr fill:#900, color:#fff
 classDef type fill:#090, color:#fff
+classDef param fill:#009, color:#fff, stroke: yellow, stroke-width: 4px
+classDef import fill:#009, color:#fff, stroke: green, stroke-width: 4px
     "
 
 let private mermaidLegend = "
 subgraph legend
     LEGEND_BINDING((BINDING)):::binding
+    LEGEND_PARAM((PARAM)):::param
+    LEGEND_IMPORT((IMPORT)):::import
     LEGEND_EXPR[EXPR]:::expr
     LEGEND_TYPE[/TYPE/]:::type
 end
@@ -130,8 +132,9 @@ let private mermaidNode (id, node) =
             "%s[\"%s\"]:::expr"
             id
             ((firstNChars (Pretty.pretty 30 (Pretty.showExpr e)) 20)
-                .Replace("\"", "\\\""))
-    | ImportNode -> sprintf "%s((\"%s\")):::binding" id id
+                .Replace("\"", "&ldquo;"))
+    | ImportNode -> sprintf "%s((\"%s\")):::import" id id
+    | ParamNode -> sprintf "%s((\"%s\")):::param" id id
 
 let rec private mermaidPrintType typ =
     match typ with
@@ -214,7 +217,14 @@ let private mermaidType (ty: TypeSystem.Type) =
 let private mermaidRelToEdge rel =
     match rel with
     | DependsOn -> "-->"
-    | _ -> "-->||"
+    | Argument i -> sprintf "-->| arg %i |" i
+    | Parameter i -> sprintf "-->| param %i |" i
+    | Field s -> sprintf "-->| field '%s' |" s
+    | PairValue i -> sprintf "-->| pairvalue %i |" i
+    | PairKey i -> sprintf "-->| pairkey %i |" i
+    | Item i -> sprintf "-->| listitem %i |" i
+    | Rest -> "-->| rest |"
+    | Applyee -> "-->| applyee |"
 
 let private mermaidEdge (from, (edge, to')) =
     sprintf "%s %s %s" from (mermaidRelToEdge edge) to'
@@ -250,6 +260,8 @@ let toMermaid
                 |> String.concat "\n")
         |> List.toSeq
         |> String.concat "\n"
+
+    printfn "Annos are\n===\n%O" annos
 
     let a =
         Map.toList annos

@@ -1,5 +1,9 @@
 module Annotate
 
+let private inspect label (tg: TypeGraph.TypeGraph) =
+    printf "%s\n----$$$----\n%s\n----$$$----" label (TypeGraph.toMermaid tg true)
+    tg
+
 let (.>>.) res fn = Result.bind fn res
 
 let joinIds id ext =
@@ -14,7 +18,6 @@ let populateImport (envs: Map<string, TypedAST.TCModule>) tg (imp: AST.ChakraImp
     | AST.ChakraLocalImport info -> tg
     | AST.ChakraPackageImport info ->
         printfn "%s\n" info.PackageName
-        printfn "%O\n" envs
 
         let exmap =
             (Map.find info.PackageName envs).ExportMap
@@ -32,8 +35,12 @@ let populateImport (envs: Map<string, TypedAST.TCModule>) tg (imp: AST.ChakraImp
 
             List.fold
                 (fun graph (foreign, local) ->
+                    printfn "Adding %s as %s from package %s" foreign local info.PackageName
+                    printfn "Type is %O" (Map.find foreign fmap)
+
                     TypeGraph.addImportNode local graph
-                    |> TypeGraph.addAnnotation local (Map.find foreign fmap))
+                    |> TypeGraph.addAnnotation local (Map.find foreign fmap)
+                    |> inspect "After import annotation")
                 tg
                 (Map.toList p)
 
@@ -51,24 +58,70 @@ let popFrame (var: string) =
     |> List.rev
     |> String.concat "/"
 
-let rec findNodeForVar var tg' =
-    match (var, TypeGraph.hasNode var tg') with
+let rec findNodeForVar var path tg' =
+    printfn "findNodeForVar %s %s" var path
+
+    match (path, TypeGraph.hasNode (joinIds path var) tg') with
     | (_, Some node) -> Some node
     | ("", None) -> None
-    | (_, None) -> findNodeForVar (popFrame var) tg'
+    | (_, None) -> findNodeForVar var (popFrame path) tg'
+
+let applyIdToString (root, path) = root
+
+
+let withIndex list = List.mapi (fun i x -> (i, x)) list
 
 let rec populateExpr bname (expr: AST.ChakraExpr) tg =
-    let tg' =
-        TypeGraph.addExprNode (exprId bname) expr tg
+    printfn "populating expr %O" expr
+    let n = exprId bname
+    let tg' = TypeGraph.addExprNode n expr tg
 
     match expr with
-    | AST.ChakraNumber (_, _) -> TypeGraph.addAnnotation (exprId bname) TypeSystem.num tg'
-    | AST.ChakraString (_, _) -> TypeGraph.addAnnotation (exprId bname) TypeSystem.str tg'
-    | AST.ChakraSymbol (_, s) -> TypeGraph.addAnnotation (exprId bname) (TypeSystem.SymbolType s) tg'
+    | AST.ChakraNumber (_, _) -> TypeGraph.addAnnotation n TypeSystem.num tg'
+    | AST.ChakraString (_, _) -> TypeGraph.addAnnotation n TypeSystem.str tg'
+    | AST.ChakraSymbol (_, s) -> TypeGraph.addAnnotation n (TypeSystem.SymbolType s) tg'
     | AST.ChakraVar (_, (var, None)) ->
-        match findNodeForVar var tg' with
-        | Some node -> TypeGraph.addDependentNode (exprId bname) node tg'
+        printfn "Finding node for %s" var
+
+        match findNodeForVar var n tg' with
+        | Some node -> TypeGraph.addDependentEdge n node tg'
         | None -> tg'
+    | AST.ChakraList (_, { Items = items; Spread = spread }) ->
+        let addItems graph = graph
+        let addSpread graph = graph
+        addItems tg' |> addSpread
+    | AST.ChakraMap (_, { Pairs = pairs; Spread = spread }) ->
+        let addPairs graph = graph
+        let addSpread graph = graph
+
+        addPairs tg' |> addSpread
+    | AST.ChakraStruct (_, { Fields = fields; Spread = spread }) ->
+        let addFields graph = graph
+        let addSpread graph = graph
+
+        addFields tg' |> addSpread
+    | AST.ChakraApplyExpr (span, app) ->
+        printfn "Apply expr"
+
+        let addApplyeeEdge id graph =
+            findNodeForVar id n tg'
+            |> Option.map (fun node -> TypeGraph.addApplyeeEdge n node graph)
+            |> Option.defaultWith (fun _ -> graph)
+
+        match app with
+        | AST.ChakraNamedApply (id, pairs) -> addApplyeeEdge (applyIdToString id) tg'
+        | AST.ChakraApply (id, exprs) ->
+            let addArgs graph =
+                List.fold
+                    (fun acc (i, arg) ->
+                        let argId = joinIds n (sprintf "%i" i)
+
+                        populateExpr argId arg acc
+                        |> TypeGraph.addArgumentEdge n (joinIds argId "$") i)
+                    graph
+                    (withIndex exprs)
+
+            addApplyeeEdge (applyIdToString id) tg' |> addArgs
     | _ -> tg'
 
 and populateExprList bname (AST.ChakraExprList (bs, expr)) tg =
@@ -78,28 +131,37 @@ and populateExprList bname (AST.ChakraExprList (bs, expr)) tg =
 and populateBinding bname tg ((b: AST.ChakraBinding), i) =
     match b.Pattern with
     | AST.ChakraSimpleBindingPattern s ->
+        printfn "Simple %s" s
         let n = joinIds bname s
 
         TypeGraph.addBindingNode n b tg
         |> populateExprList n b.ExprList
-        |> TypeGraph.addDependentNode n (exprId n)
+        |> TypeGraph.addDependentEdge n (exprId n)
     | AST.ChakraComplexBindingPattern p -> tg
     | AST.ChakraFunctionBindingPattern p ->
+        printfn "Function %s" p.Name
         let n = joinIds bname p.Name
 
+        let withParamNodes graph =
+            List.fold
+                (fun acc (i, p) ->
+                    let id = joinIds n p
+
+                    TypeGraph.addParamNode id acc
+                    |> TypeGraph.addParameterEdge n id i)
+                graph
+                (List.mapi (fun i a -> (i, a)) p.Args)
+
         TypeGraph.addBindingNode n b tg
+        |> withParamNodes
         |> populateExprList n b.ExprList
-        |> TypeGraph.addDependentNode n (exprId n)
+        |> TypeGraph.addDependentEdge n (exprId n)
 
 let populateTopLevelBinding tg ((b: AST.ChakraBinding), i) =
     match b.Pattern with
     | AST.ChakraSimpleBindingPattern s -> TypeGraph.addBindingNode s b tg
     | AST.ChakraComplexBindingPattern p -> tg
     | AST.ChakraFunctionBindingPattern p -> TypeGraph.addBindingNode p.Name b tg
-
-let private inspect label (tg: TypeGraph.TypeGraph) =
-    printf "%s\n----$$$----\n%s\n----$$$----" label (TypeGraph.toMermaid tg true)
-    tg
 
 
 let populateTopLevelBindings (bs: AST.ChakraBinding list) (tg: TypeGraph.TypeGraph) =
