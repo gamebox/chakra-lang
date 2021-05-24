@@ -16,6 +16,7 @@ type TypedASTNode =
 type Relation =
     | DependsOn
     | Argument of int
+    | NamedArg of string
     | Parameter of int
     | Field of string
     | PairValue of int
@@ -73,6 +74,8 @@ let addDependentEdge from to' tg = addEdge from to' (DependsOn) tg
 
 let addArgumentEdge from to' n tg = addEdge from to' (Argument n) tg
 
+let addNamedArgEdge from to' s tg = addEdge from to' (NamedArg s) tg
+
 let addParameterEdge from to' n tg = addEdge from to' (Parameter n) tg
 
 let addFieldEdge from to' s tg = addEdge from to' (Field s) tg
@@ -100,6 +103,12 @@ let hasNode node { Nodes = nodes } =
     |> Option.map (fun _ -> node)
 
 let getNodeType node { Annotations = annos } = Map.tryFind node annos
+let getBindingNode node { Nodes = nodes } =
+    Map.tryFind node nodes
+    |> Option.bind (fun n ->
+        match n with
+        | BindingNode b -> Some b
+        | _ -> None)
 
 (* Display *)
 
@@ -218,6 +227,7 @@ let private mermaidRelToEdge rel =
     match rel with
     | DependsOn -> "-->"
     | Argument i -> sprintf "-->| arg %i |" i
+    | NamedArg s -> sprintf "-->| arg '%s' |" s
     | Parameter i -> sprintf "-->| param %i |" i
     | Field s -> sprintf "-->| field '%s' |" s
     | PairValue i -> sprintf "-->| pairvalue %i |" i

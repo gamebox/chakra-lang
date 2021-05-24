@@ -77,39 +77,81 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
     let tg' = TypeGraph.addExprNode n expr tg
 
     match expr with
-    | AST.ChakraNumber (_, _) -> TypeGraph.addAnnotation n TypeSystem.num tg'
-    | AST.ChakraString (_, _) -> TypeGraph.addAnnotation n TypeSystem.str tg'
-    | AST.ChakraSymbol (_, s) -> TypeGraph.addAnnotation n (TypeSystem.SymbolType s) tg'
+    | AST.ChakraNumber (_, _) ->
+        TypeGraph.addAnnotation n TypeSystem.num tg'
+    | AST.ChakraString (_, _) ->
+        TypeGraph.addAnnotation n TypeSystem.str tg'
+    | AST.ChakraSymbol (_, s) ->
+        TypeGraph.addAnnotation n (TypeSystem.SymbolType s) tg'
     | AST.ChakraVar (_, (var, None)) ->
-        printfn "Finding node for %s" var
-
         match findNodeForVar var n tg' with
         | Some node -> TypeGraph.addDependentEdge n node tg'
         | None -> tg'
+    | AST.ChakraVar (_, (var, Some path)) -> tg'
     | AST.ChakraList (_, { Items = items; Spread = spread }) ->
-        let addItems graph = graph
+        let addItems graph =
+            List.fold
+                    (fun acc (i, expr) ->
+                        let argId = joinIds n (sprintf "ITEM-%i" i)
+
+                        populateExpr argId expr acc
+                        |> TypeGraph.addItemEdge n (joinIds argId "$") i)
+                    graph
+                    (withIndex items)
+
         let addSpread graph = graph
+        
         addItems tg' |> addSpread
     | AST.ChakraMap (_, { Pairs = pairs; Spread = spread }) ->
-        let addPairs graph = graph
+        let addPairs graph =
+            List.fold
+                    (fun acc (i, ({ Key = key; Value = value }: AST.ChakraMapPair)) ->
+                        let keyId = joinIds n (sprintf "PAIR-%i-KEY" i)
+                        let valueId = joinIds n (sprintf "PAIR-%i-VALUE" i)
+
+                        populateExpr keyId key acc
+                        |> TypeGraph.addPairKeyEdge n (joinIds keyId "$") i
+                        |> populateExpr valueId value
+                        |> TypeGraph.addPairKeyEdge n (joinIds valueId "$") i)
+                    graph
+                    (withIndex pairs)
+
         let addSpread graph = graph
 
         addPairs tg' |> addSpread
     | AST.ChakraStruct (_, { Fields = fields; Spread = spread }) ->
-        let addFields graph = graph
+        let addFields graph =
+            List.fold
+                    (fun acc ({ Name = name; Value = value }: AST.ChakraStructField) ->
+                        let argId = joinIds n (sprintf "FIELD-%s" name)
+
+                        populateExpr argId expr acc
+                        |> TypeGraph.addFieldEdge n (joinIds argId "$") name)
+                    graph
+                    fields
+
         let addSpread graph = graph
 
         addFields tg' |> addSpread
     | AST.ChakraApplyExpr (span, app) ->
-        printfn "Apply expr"
-
         let addApplyeeEdge id graph =
             findNodeForVar id n tg'
             |> Option.map (fun node -> TypeGraph.addApplyeeEdge n node graph)
             |> Option.defaultWith (fun _ -> graph)
 
         match app with
-        | AST.ChakraNamedApply (id, pairs) -> addApplyeeEdge (applyIdToString id) tg'
+        | AST.ChakraNamedApply (id, pairs) ->
+            let addArgs graph =
+                List.fold
+                    (fun acc (_, (fieldName, expr)) ->
+                        let argId = joinIds n (sprintf "FIELD-%s" fieldName)
+
+                        populateExpr argId expr acc
+                        |> TypeGraph.addNamedArgEdge n (joinIds argId "$") fieldName)
+                    graph
+                    pairs
+
+            addApplyeeEdge (applyIdToString id) tg' |> addArgs
         | AST.ChakraApply (id, exprs) ->
             let addArgs graph =
                 List.fold
@@ -122,7 +164,10 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
                     (withIndex exprs)
 
             addApplyeeEdge (applyIdToString id) tg' |> addArgs
-    | _ -> tg'
+    | AST.ChakraPipeExpr _ -> tg'
+    | AST.ChakraMatchExpr _ -> tg'
+    | AST.ChakraLambda _ -> tg'
+    | AST.ChakraNativeExpr _ -> tg'
 
 and populateExprList bname (AST.ChakraExprList (bs, expr)) tg =
     List.fold (populateBinding bname) tg (List.mapi (fun i b -> b, i) bs)
