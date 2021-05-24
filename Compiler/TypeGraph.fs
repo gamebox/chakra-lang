@@ -103,13 +103,63 @@ let hasNode node { Nodes = nodes } =
     |> Option.map (fun _ -> node)
 
 let getNodeType node { Annotations = annos } = Map.tryFind node annos
+
 let getBindingNode node { Nodes = nodes } =
     Map.tryFind node nodes
-    |> Option.bind (fun n ->
-        match n with
-        | BindingNode b -> Some b
-        | _ -> None)
+    |> Option.bind
+        (fun n ->
+            match n with
+            | BindingNode b -> Some b
+            | _ -> None)
 
+let findLeaf { Nodes = nodes; UpRelations = rels } =
+    Map.tryFindKey (fun k (v: (Relation * string) list) -> v.Length = 0) rels
+    |> Option.bind (fun k -> Map.tryFind k nodes)
+
+let private getDependent node (edgePredicate: (Relation * string) -> string list) { DownRelations = rels } =
+    Map.tryFind node rels
+    |> Option.bind
+        (fun deps ->
+            List.collect edgePredicate deps
+            |> List.tryExactlyOne)
+
+let getArg node n tg =
+    getDependent
+        node
+        (fun (rel, s) ->
+            match rel with
+            | Argument i when i = n -> [ s ]
+            | _ -> [])
+        tg
+
+let getApplyee node tg =
+    getDependent
+        node
+        (fun (rel, s) ->
+            match rel with
+            | Applyee -> [ s ]
+            | _ -> [])
+        tg
+
+let getExprListExpr node tg =
+    getDependent
+        node
+        (fun (rel, s) ->
+            match rel with
+            | DependsOn -> [ s ]
+            | _ -> [])
+        tg
+
+let getVarDef = getExprListExpr
+
+let getParam node n tg =
+    getDependent
+        node
+        (fun (rel, s) ->
+            match rel with
+            | Parameter i when i = n -> [ s ]
+            | _ -> [])
+        tg
 (* Display *)
 
 let private mermaidClasses = "

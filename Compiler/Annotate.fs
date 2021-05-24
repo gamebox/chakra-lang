@@ -77,44 +77,55 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
     let tg' = TypeGraph.addExprNode n expr tg
 
     match expr with
-    | AST.ChakraNumber (_, _) ->
-        TypeGraph.addAnnotation n TypeSystem.num tg'
-    | AST.ChakraString (_, _) ->
-        TypeGraph.addAnnotation n TypeSystem.str tg'
-    | AST.ChakraSymbol (_, s) ->
-        TypeGraph.addAnnotation n (TypeSystem.SymbolType s) tg'
+    | AST.ChakraNumber (_, _) -> TypeGraph.addAnnotation n TypeSystem.num tg'
+    | AST.ChakraString (_, _) -> TypeGraph.addAnnotation n TypeSystem.str tg'
+    | AST.ChakraSymbol (_, s) -> TypeGraph.addAnnotation n (TypeSystem.SymbolType s) tg'
     | AST.ChakraVar (_, (var, None)) ->
         match findNodeForVar var n tg' with
         | Some node -> TypeGraph.addDependentEdge n node tg'
         | None -> tg'
     | AST.ChakraVar (_, (var, Some path)) -> tg'
+    | AST.ChakraTuple (_, items) ->
+        let addItems graph =
+            List.fold
+                (fun acc (i, expr) ->
+                    let argId = joinIds n (sprintf "ITEM-%i" i)
+
+                    populateExpr argId expr acc
+                    |> TypeGraph.addItemEdge n (joinIds argId "$") i)
+                graph
+                (withIndex items)
+
+        let addSpread graph = graph
+
+        addItems tg'
     | AST.ChakraList (_, { Items = items; Spread = spread }) ->
         let addItems graph =
             List.fold
-                    (fun acc (i, expr) ->
-                        let argId = joinIds n (sprintf "ITEM-%i" i)
+                (fun acc (i, expr) ->
+                    let argId = joinIds n (sprintf "ITEM-%i" i)
 
-                        populateExpr argId expr acc
-                        |> TypeGraph.addItemEdge n (joinIds argId "$") i)
-                    graph
-                    (withIndex items)
+                    populateExpr argId expr acc
+                    |> TypeGraph.addItemEdge n (joinIds argId "$") i)
+                graph
+                (withIndex items)
 
         let addSpread graph = graph
-        
+
         addItems tg' |> addSpread
     | AST.ChakraMap (_, { Pairs = pairs; Spread = spread }) ->
         let addPairs graph =
             List.fold
-                    (fun acc (i, ({ Key = key; Value = value }: AST.ChakraMapPair)) ->
-                        let keyId = joinIds n (sprintf "PAIR-%i-KEY" i)
-                        let valueId = joinIds n (sprintf "PAIR-%i-VALUE" i)
+                (fun acc (i, { Key = key; Value = value }: AST.ChakraMapPair) ->
+                    let keyId = joinIds n (sprintf "PAIR-%i-KEY" i)
+                    let valueId = joinIds n (sprintf "PAIR-%i-VALUE" i)
 
-                        populateExpr keyId key acc
-                        |> TypeGraph.addPairKeyEdge n (joinIds keyId "$") i
-                        |> populateExpr valueId value
-                        |> TypeGraph.addPairKeyEdge n (joinIds valueId "$") i)
-                    graph
-                    (withIndex pairs)
+                    populateExpr keyId key acc
+                    |> TypeGraph.addPairKeyEdge n (joinIds keyId "$") i
+                    |> populateExpr valueId value
+                    |> TypeGraph.addPairKeyEdge n (joinIds valueId "$") i)
+                graph
+                (withIndex pairs)
 
         let addSpread graph = graph
 
@@ -122,13 +133,13 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
     | AST.ChakraStruct (_, { Fields = fields; Spread = spread }) ->
         let addFields graph =
             List.fold
-                    (fun acc ({ Name = name; Value = value }: AST.ChakraStructField) ->
-                        let argId = joinIds n (sprintf "FIELD-%s" name)
+                (fun acc ({ Name = name; Value = value }: AST.ChakraStructField) ->
+                    let argId = joinIds n (sprintf "FIELD-%s" name)
 
-                        populateExpr argId expr acc
-                        |> TypeGraph.addFieldEdge n (joinIds argId "$") name)
-                    graph
-                    fields
+                    populateExpr argId value acc
+                    |> TypeGraph.addFieldEdge n (joinIds argId "$") name)
+                graph
+                fields
 
         let addSpread graph = graph
 
@@ -164,9 +175,22 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
                     (withIndex exprs)
 
             addApplyeeEdge (applyIdToString id) tg' |> addArgs
+    | AST.ChakraLambda (_, l) ->
+        let withParamNodes graph =
+            List.fold
+                (fun acc (i, p) ->
+                    let id = joinIds n p
+
+                    TypeGraph.addParamNode id acc
+                    |> TypeGraph.addParameterEdge n id i)
+                graph
+                (List.mapi (fun i a -> (i, a)) l.Args)
+
+        withParamNodes tg'
+        |> populateExprList n l.Body
+        |> TypeGraph.addDependentEdge n (exprId n)
     | AST.ChakraPipeExpr _ -> tg'
     | AST.ChakraMatchExpr _ -> tg'
-    | AST.ChakraLambda _ -> tg'
     | AST.ChakraNativeExpr _ -> tg'
 
 and populateExprList bname (AST.ChakraExprList (bs, expr)) tg =
@@ -176,15 +200,13 @@ and populateExprList bname (AST.ChakraExprList (bs, expr)) tg =
 and populateBinding bname tg ((b: AST.ChakraBinding), i) =
     match b.Pattern with
     | AST.ChakraSimpleBindingPattern s ->
-        printfn "Simple %s" s
         let n = joinIds bname s
 
         TypeGraph.addBindingNode n b tg
         |> populateExprList n b.ExprList
         |> TypeGraph.addDependentEdge n (exprId n)
-    | AST.ChakraComplexBindingPattern p -> tg
+    | AST.ChakraComplexBindingPattern p -> TypeGraph.addBindingNode (joinIds bname (sprintf "BINDING-%i" i)) b tg
     | AST.ChakraFunctionBindingPattern p ->
-        printfn "Function %s" p.Name
         let n = joinIds bname p.Name
 
         let withParamNodes graph =

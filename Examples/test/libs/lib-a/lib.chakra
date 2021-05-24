@@ -10,9 +10,31 @@
 
 number = 1
 
-string = ""
+string = "Some string"
 
 function(a) = add(number, a)
+
+tuple = (number, string)
+
+struct = %(
+    my-number = 3,
+)
+
+list = [number, 2, 3]
+
+map = %[
+    number = string,
+    2 = "Another string"
+]
+
+lambda =
+    { (a) ->
+        add(number, a) }
+
+complex(fn) =
+    some-num = 42
+    some-string = fn("Hello")
+    (some-num, some-string)
 
 ; print(type) =
 ;     type ?
