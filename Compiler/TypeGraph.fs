@@ -112,11 +112,29 @@ let getBindingNode node { Nodes = nodes } =
             | BindingNode b -> Some b
             | _ -> None)
 
-let findLeaf { Nodes = nodes; UpRelations = rels } =
-    Map.tryFindKey (fun k (v: (Relation * string) list) -> v.Length = 0) rels
+
+/// Finds the next node 
+let findAnnotationTarget pred { UpRelations = rels; Annotations = annos } =
+    Map.toSeq rels
+    |> Seq.tryFind (fun (k, rels) ->
+        (List.filter (fun (rel, dep) -> Map.containsKey dep annos) rels).Length
+        |> (=) rels.Length
+        |> (&&) (not (Map.containsKey k annos)))
+    |> Option.map fst
+
+let findAnnotationLeaf { Nodes = nodes; UpRelations = rels; Annotations = annos } =
+    Map.tryFindKey
+        (fun k (v: (Relation * string) list) ->
+            v.Length = 0 && not (Map.containsKey k annos))
+        rels
     |> Option.bind (fun k -> Map.tryFind k nodes)
 
-let private getDependent node (edgePredicate: (Relation * string) -> string list) { DownRelations = rels } =
+let getDependents node { DownRelations = rels } =
+    Map.tryFind node rels
+    |> Option.map (fun deps -> List.map snd deps)
+    |> Option.defaultWith (fun () -> [])
+
+let private getDependencies node (edgePredicate: (Relation * string) -> string list) { UpRelations = rels } =
     Map.tryFind node rels
     |> Option.bind
         (fun deps ->
@@ -124,7 +142,7 @@ let private getDependent node (edgePredicate: (Relation * string) -> string list
             |> List.tryExactlyOne)
 
 let getArg node n tg =
-    getDependent
+    getDependencies
         node
         (fun (rel, s) ->
             match rel with
@@ -133,7 +151,7 @@ let getArg node n tg =
         tg
 
 let getApplyee node tg =
-    getDependent
+    getDependencies
         node
         (fun (rel, s) ->
             match rel with
@@ -142,7 +160,7 @@ let getApplyee node tg =
         tg
 
 let getExprListExpr node tg =
-    getDependent
+    getDependencies
         node
         (fun (rel, s) ->
             match rel with
@@ -153,7 +171,7 @@ let getExprListExpr node tg =
 let getVarDef = getExprListExpr
 
 let getParam node n tg =
-    getDependent
+    getDependencies
         node
         (fun (rel, s) ->
             match rel with
@@ -332,7 +350,7 @@ let toMermaid
     sprintf
         "
 ```mermaid
-graph TB
+graph LR
 %s
 
 %s

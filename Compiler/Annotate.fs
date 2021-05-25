@@ -1,7 +1,9 @@
 module Annotate
 
-let private inspect label (tg: TypeGraph.TypeGraph) =
-    printf "%s\n----$$$----\n%s\n----$$$----" label (TypeGraph.toMermaid tg true)
+let private inspect (label: string) (tg: TypeGraph.TypeGraph) =
+    let path = sprintf "/home/anthony/.%s.md" label
+    let diagram = TypeGraph.toMermaid tg true
+    System.IO.File.WriteAllText(path, diagram)
     tg
 
 let (.>>.) res fn = Result.bind fn res
@@ -39,8 +41,7 @@ let populateImport (envs: Map<string, TypedAST.TCModule>) tg (imp: AST.ChakraImp
                     printfn "Type is %O" (Map.find foreign fmap)
 
                     TypeGraph.addImportNode local graph
-                    |> TypeGraph.addAnnotation local (Map.find foreign fmap)
-                    |> inspect "After import annotation")
+                    |> TypeGraph.addAnnotation local (Map.find foreign fmap))
                 tg
                 (Map.toList p)
 
@@ -238,6 +239,9 @@ let populateTopLevelBindings (bs: AST.ChakraBinding list) (tg: TypeGraph.TypeGra
     |> List.fold populateTopLevelBinding tg
     |> (fun tg' -> List.fold (populateBinding "") tg' bsi)
     |> inspect "Typegraph"
+    |> (fun tg ->
+        printfn "What did we find? %O" (TypeGraph.findAnnotationTarget tg)
+        tg)
     |> Ok
 
 
