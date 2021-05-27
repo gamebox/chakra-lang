@@ -9,6 +9,11 @@ type ASTNode =
     | ImportNode
     | ParamNode
 
+    member x.IsParam =
+        match x with
+        | ParamNode -> true
+        | _ -> false
+
 type TypedASTNode =
     | TypedBindingNode of TypedAST.TCBinding
     | TypedExprNode of TypedAST.TCExpr
@@ -90,12 +95,25 @@ let addRestEdge from to' tg = addEdge from to' (Rest) tg
 
 let addApplyeeEdge from to' tg = addEdge from to' (Applyee) tg
 
-let addAnnotation n ty tg =
-    match Map.find n tg.Nodes with
-    | _ ->
+let rec addAnnotation n ty tg =
+    let withNewAnno =
         { tg with
               Annotations = Map.add n ty tg.Annotations
               Types = Set.add ty tg.Types }
+    match Map.tryFind n withNewAnno.Nodes with
+    | Some (ExprNode (ChakraVar _)) ->  
+        Map.tryFind n withNewAnno.UpRelations
+        |> Option.bind (fun rels ->
+            let dependsOnParam (_, s) =
+                (Map.find s withNewAnno.Nodes).IsParam
+            List.tryFind dependsOnParam rels
+            |> Option.map (fun (_, s) ->
+                printfn "The var at %s depends on param at %s" n s
+                addAnnotation s ty withNewAnno))
+        |> Option.defaultValue withNewAnno
+    | Some _ ->
+        withNewAnno
+    | None -> tg
 
 
 let hasNode node { Nodes = nodes } =
@@ -112,22 +130,13 @@ let getBindingNode node { Nodes = nodes } =
             | BindingNode b -> Some b
             | _ -> None)
 
-
-/// Finds the next node 
-let findAnnotationTarget pred { UpRelations = rels; Annotations = annos } =
-    Map.toSeq rels
-    |> Seq.tryFind (fun (k, rels) ->
-        (List.filter (fun (rel, dep) -> Map.containsKey dep annos) rels).Length
-        |> (=) rels.Length
-        |> (&&) (not (Map.containsKey k annos)))
-    |> Option.map fst
-
-let findAnnotationLeaf { Nodes = nodes; UpRelations = rels; Annotations = annos } =
-    Map.tryFindKey
-        (fun k (v: (Relation * string) list) ->
-            v.Length = 0 && not (Map.containsKey k annos))
-        rels
-    |> Option.bind (fun k -> Map.tryFind k nodes)
+let getExprNode node { Nodes = nodes } =
+    Map.tryFind node nodes
+    |> Option.bind
+        (fun n ->
+            match n with
+            | ExprNode e -> Some e
+            | _ -> None)
 
 let getDependents node { DownRelations = rels } =
     Map.tryFind node rels
@@ -139,7 +148,7 @@ let private getDependencies node (edgePredicate: (Relation * string) -> string l
     |> Option.bind
         (fun deps ->
             List.collect edgePredicate deps
-            |> List.tryExactlyOne)
+            |> List.tryHead)
 
 let getArg node n tg =
     getDependencies
@@ -149,6 +158,43 @@ let getArg node n tg =
             | Argument i when i = n -> [ s ]
             | _ -> [])
         tg
+
+let getItem node n tg =
+    getDependencies
+        node
+        (fun (rel, s) ->
+            match rel with
+            | Item i when i = n -> [ s ]
+            | _ -> [])
+        tg
+
+let getField node name tg =
+    getDependencies
+        node
+        (fun (rel, s) ->
+            match rel with
+            | Field f when f = name -> [ s ]
+            | _ -> [])
+        tg
+
+let getPair node n tg =
+    getDependencies
+        node
+        (fun (rel, s) ->
+            match rel with
+            | PairKey i when i = n -> [ s ]
+            | _ -> [])
+        tg
+    |> Option.bind (fun key ->
+        printfn "Found key at %s" key
+        getDependencies
+            node
+            (fun (rel, s) ->
+                match rel with
+                | PairValue i when i = n -> [ s ]
+                | _ -> [])
+            tg
+        |> Option.map (fun value -> (key, value)))
 
 let getApplyee node tg =
     getDependencies
@@ -178,6 +224,43 @@ let getParam node n tg =
             | Parameter i when i = n -> [ s ]
             | _ -> [])
         tg
+
+/// Finds the next node that can be annotated.  Skips nodes that are a parameter.
+let findAnnotationTarget tg =
+    let { Nodes = nodes; UpRelations = uprels; DownRelations = deprels; Annotations = annos } = tg
+    Map.toSeq uprels
+    |> Seq.tryFind (fun (k, rels) ->
+        let isParamNode =
+            match Map.find k nodes with
+            | ParamNode -> true
+            | _ -> false
+        (List.filter (fun (rel, dep) ->
+            (Map.containsKey dep annos)) rels).Length
+        |> (=) rels.Length
+        |> (&&) (not isParamNode)
+        |> (&&) (not (Map.containsKey k annos)))
+    |> Option.map fst
+    |> Option.orElseWith (fun () ->
+        Map.toSeq nodes
+        |> Seq.tryFind (fun (n, node) ->
+            match node with
+            | ExprNode (ChakraApplyExpr _) ->
+                
+                let applyeeIsAnnotated =
+                    getApplyee n tg
+                    |> Option.filter (fun applyee -> Map.containsKey applyee annos)
+                    |> Option.isSome
+
+                (not (Map.containsKey n annos)) && applyeeIsAnnotated
+            | _ -> false)
+        |> Option.map fst)
+
+let findAnnotationLeaf { Nodes = nodes; UpRelations = rels; Annotations = annos } =
+    Map.tryFindKey
+        (fun k (v: (Relation * string) list) ->
+            v.Length = 0 && not (Map.containsKey k annos))
+        rels
+
 (* Display *)
 
 let private mermaidClasses = "
@@ -318,12 +401,22 @@ let toMermaid
       Annotations = annos }
     (withLegend: bool)
     =
-    let n =
+    let annotated =
         Map.toList nodes
+        |> List.filter (fun (s, _) ->
+            Map.containsKey s annos)
         |> List.map mermaidNode
         |> List.toSeq
         |> String.concat "\n"
 
+    let unannotated =
+        Map.toList nodes
+        |> List.filter (fun (s, _) ->
+            Map.containsKey s annos
+            |> not)
+        |> List.map mermaidNode
+        |> List.toSeq
+        |> String.concat "\n"
     let t =
         Set.toList tys
         |> List.map mermaidType
@@ -339,8 +432,6 @@ let toMermaid
         |> List.toSeq
         |> String.concat "\n"
 
-    printfn "Annos are\n===\n%O" annos
-
     let a =
         Map.toList annos
         |> List.map mermaidAnnoToEdge
@@ -351,9 +442,18 @@ let toMermaid
         "
 ```mermaid
 graph LR
-%s
 
+subgraph annotated
 %s
+end
+
+subgraph unannotated
+%s
+end
+
+subgraph types
+%s
+end
 
 %s
 
@@ -363,7 +463,8 @@ graph LR
 %s
 ```
     "
-        n
+        annotated
+        unannotated
         t
         e
         a
