@@ -100,19 +100,21 @@ let rec addAnnotation n ty tg =
         { tg with
               Annotations = Map.add n ty tg.Annotations
               Types = Set.add ty tg.Types }
+
     match Map.tryFind n withNewAnno.Nodes with
-    | Some (ExprNode (ChakraVar _)) ->  
+    | Some (ExprNode (ChakraVar _)) ->
         Map.tryFind n withNewAnno.UpRelations
-        |> Option.bind (fun rels ->
-            let dependsOnParam (_, s) =
-                (Map.find s withNewAnno.Nodes).IsParam
-            List.tryFind dependsOnParam rels
-            |> Option.map (fun (_, s) ->
-                printfn "The var at %s depends on param at %s" n s
-                addAnnotation s ty withNewAnno))
+        |> Option.bind
+            (fun rels ->
+                let dependsOnParam (_, s) = (Map.find s withNewAnno.Nodes).IsParam
+
+                List.tryFind dependsOnParam rels
+                |> Option.map
+                    (fun (_, s) ->
+                        printfn "The var at %s depends on param at %s" n s
+                        addAnnotation s ty withNewAnno))
         |> Option.defaultValue withNewAnno
-    | Some _ ->
-        withNewAnno
+    | Some _ -> withNewAnno
     | None -> tg
 
 
@@ -145,10 +147,7 @@ let getDependents node { DownRelations = rels } =
 
 let private getDependencies node (edgePredicate: (Relation * string) -> string list) { UpRelations = rels } =
     Map.tryFind node rels
-    |> Option.bind
-        (fun deps ->
-            List.collect edgePredicate deps
-            |> List.tryHead)
+    |> Option.bind (fun deps -> List.collect edgePredicate deps |> List.tryHead)
 
 let getArg node n tg =
     getDependencies
@@ -185,16 +184,18 @@ let getPair node n tg =
             | PairKey i when i = n -> [ s ]
             | _ -> [])
         tg
-    |> Option.bind (fun key ->
-        printfn "Found key at %s" key
-        getDependencies
-            node
-            (fun (rel, s) ->
-                match rel with
-                | PairValue i when i = n -> [ s ]
-                | _ -> [])
-            tg
-        |> Option.map (fun value -> (key, value)))
+    |> Option.bind
+        (fun key ->
+            printfn "Found key at %s" key
+
+            getDependencies
+                node
+                (fun (rel, s) ->
+                    match rel with
+                    | PairValue i when i = n -> [ s ]
+                    | _ -> [])
+                tg
+            |> Option.map (fun value -> (key, value)))
 
 let getApplyee node tg =
     getDependencies
@@ -227,39 +228,69 @@ let getParam node n tg =
 
 /// Finds the next node that can be annotated.  Skips nodes that are a parameter.
 let findAnnotationTarget tg =
-    let { Nodes = nodes; UpRelations = uprels; DownRelations = deprels; Annotations = annos } = tg
-    Map.toSeq uprels
-    |> Seq.tryFind (fun (k, rels) ->
-        let isParamNode =
-            match Map.find k nodes with
-            | ParamNode -> true
-            | _ -> false
-        (List.filter (fun (rel, dep) ->
-            (Map.containsKey dep annos)) rels).Length
-        |> (=) rels.Length
-        |> (&&) (not isParamNode)
-        |> (&&) (not (Map.containsKey k annos)))
-    |> Option.map fst
-    |> Option.orElseWith (fun () ->
+    let { Nodes = nodes
+          UpRelations = uprels
+          DownRelations = deprels
+          Annotations = annos } =
+        tg
+
+    let primaryTarget =
+        Map.toSeq uprels
+        |> Seq.tryFind
+            (fun (k, rels) ->
+                let isParamNode = (Map.find k nodes).IsParam
+
+                (List.filter (fun (rel, dep) -> (Map.containsKey dep annos)) rels)
+                    .Length
+                |> (=) rels.Length
+                |> (&&) (not isParamNode)
+                |> (&&) (not (Map.containsKey k annos)))
+        |> Option.map fst
+
+    let applyWithApplyeeAnnotated () =
         Map.toSeq nodes
-        |> Seq.tryFind (fun (n, node) ->
-            match node with
-            | ExprNode (ChakraApplyExpr _) ->
-                
-                let applyeeIsAnnotated =
-                    getApplyee n tg
-                    |> Option.filter (fun applyee -> Map.containsKey applyee annos)
-                    |> Option.isSome
+        |> Seq.tryFind
+            (fun (n, node) ->
+                match node with
+                | ExprNode (ChakraApplyExpr _) ->
 
-                (not (Map.containsKey n annos)) && applyeeIsAnnotated
-            | _ -> false)
-        |> Option.map fst)
+                    let applyeeIsAnnotated =
+                        getApplyee n tg
+                        |> Option.filter (fun applyee -> Map.containsKey applyee annos)
+                        |> Option.isSome
 
-let findAnnotationLeaf { Nodes = nodes; UpRelations = rels; Annotations = annos } =
-    Map.tryFindKey
-        (fun k (v: (Relation * string) list) ->
-            v.Length = 0 && not (Map.containsKey k annos))
-        rels
+                    (not (Map.containsKey n annos))
+                    && applyeeIsAnnotated
+                | _ -> false)
+        |> Option.map fst
+
+    // let applyWithApplyeeAsParam () =
+    //     Map.toSeq nodes
+    //     |> Seq.tryFind (fun (n, node) ->
+    //         match node with
+    //         | ExprNode (ChakraApplyExpr _) ->
+
+    //             let applyeeIsParam =
+    //                 getApplyee n tg
+    //                 |> Option.bind (fun applyee ->
+    //                     Map.find applyee deprels
+    //                     |> Option.filter (fun appdeps ->
+    //                         List.find ))
+    //                 |> Option.defaultValue false
+
+    //             (not (Map.containsKey n annos)) && applyeeIsParam
+    //         | _ -> false)
+    //     |> Option.map fst
+
+    primaryTarget
+    |> Option.orElseWith applyWithApplyeeAnnotated
+
+let findAnnotationLeaf
+    { Nodes = nodes
+      UpRelations = rels
+      Annotations = annos }
+    =
+    Map.tryFindKey (fun k (v: (Relation * string) list) -> v.Length = 0 && not (Map.containsKey k annos)) rels
 
 (* Display *)
 
@@ -403,20 +434,18 @@ let toMermaid
     =
     let annotated =
         Map.toList nodes
-        |> List.filter (fun (s, _) ->
-            Map.containsKey s annos)
+        |> List.filter (fun (s, _) -> Map.containsKey s annos)
         |> List.map mermaidNode
         |> List.toSeq
         |> String.concat "\n"
 
     let unannotated =
         Map.toList nodes
-        |> List.filter (fun (s, _) ->
-            Map.containsKey s annos
-            |> not)
+        |> List.filter (fun (s, _) -> Map.containsKey s annos |> not)
         |> List.map mermaidNode
         |> List.toSeq
         |> String.concat "\n"
+
     let t =
         Set.toList tys
         |> List.map mermaidType
