@@ -31,10 +31,26 @@ lambda =
     { (a) ->
         add(number, a) }
 
+using-function = function(3)
+
+make(name, age) =
+    %(
+        name,
+        age
+    )
+
 complex(fn) =
     some-num = 42
     some-string = fn("Hello")
     (some-num, some-string)
+
+
+; Uncomment when we add support for spread and struct field access
+zump(struct) =
+    %(
+        num = function(struct),
+        ...struct,
+    )
 
 ; print(type) =
 ;     type ?

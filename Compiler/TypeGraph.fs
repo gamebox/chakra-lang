@@ -107,7 +107,7 @@ let rec addAnnotation n ty tg =
         |> Option.bind
             (fun rels ->
                 let dependsOnParam (_, s) = (Map.find s withNewAnno.Nodes).IsParam
-
+ 
                 List.tryFind dependsOnParam rels
                 |> Option.map
                     (fun (_, s) ->
@@ -248,6 +248,7 @@ let findAnnotationTarget tg =
         |> Option.map fst
 
     let applyWithApplyeeAnnotated () =
+        printfn "Looking for an apply expr with its applyee annotated"
         Map.toSeq nodes
         |> Seq.tryFind
             (fun (n, node) ->
@@ -264,26 +265,28 @@ let findAnnotationTarget tg =
                 | _ -> false)
         |> Option.map fst
 
-    // let applyWithApplyeeAsParam () =
-    //     Map.toSeq nodes
-    //     |> Seq.tryFind (fun (n, node) ->
-    //         match node with
-    //         | ExprNode (ChakraApplyExpr _) ->
-
-    //             let applyeeIsParam =
-    //                 getApplyee n tg
-    //                 |> Option.bind (fun applyee ->
-    //                     Map.find applyee deprels
-    //                     |> Option.filter (fun appdeps ->
-    //                         List.find ))
-    //                 |> Option.defaultValue false
-
-    //             (not (Map.containsKey n annos)) && applyeeIsParam
-    //         | _ -> false)
-    //     |> Option.map fst
+    let unannotatedParamDep () =
+        printfn "Looking for unannotated parameter dependency"
+        Map.toSeq nodes
+        |> Seq.filter (fun (n, node) ->
+            node.IsParam && (not (Map.containsKey n annos)))
+        |> Seq.collect (fun (n, node) ->
+            Map.tryFind n deprels
+            |> Option.map (fun rels ->
+                List.filter
+                    (fun (rel, s) ->
+                        match rel with
+                        | Parameter _ -> false
+                        | _ -> true)
+                    rels
+                |> List.toSeq)
+            |> Option.defaultWith (fun () -> Seq.empty))
+        |> Seq.tryHead
+        |> Option.map snd
 
     primaryTarget
     |> Option.orElseWith applyWithApplyeeAnnotated
+    // |> Option.orElseWith unannotatedParamDep
 
 let findAnnotationLeaf
     { Nodes = nodes
@@ -358,9 +361,9 @@ let rec private mermaidPrintType typ =
 
     | StructType (fields, isOpen, tag) ->
         sprintf
-            "%%( %s %s)"
+            "%%( %s %s )"
             (fields
-             |> List.map (fun (name, typ) -> sprintf ".%s = %s" name (mermaidPrintType typ))
+             |> List.map (fun (name, typ) -> sprintf "%s = %s" name (mermaidPrintType typ))
              |> String.concat ", ")
             (if isOpen then "..." else "")
 
@@ -400,6 +403,7 @@ let private mermaidCleanType (ty: string) =
     |> r "%" "PERCENT"
     |> r "," "COMMA"
     |> r " " ""
+    |> r "?" "QUESTION"
 
 let private mermaidType (ty: TypeSystem.Type) =
     let typ = mermaidPrintType ty
