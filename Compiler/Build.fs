@@ -191,7 +191,7 @@ let verifyProject
                 printf "Skipping annotation for %s" path
                 acc
 
-        printfn "%O" (List.map ((modName root) << (relativePath root) << fst) sortedModules)
+        // printfn "%O" (List.map ((modName root) << (relativePath root) << fst) sortedModules)
 
         List.fold blah (Ok(Map [ "/stdlib", stdlib ])) sortedModules
         |> Result.mapError (fun e -> BuildTypeError [ e ])

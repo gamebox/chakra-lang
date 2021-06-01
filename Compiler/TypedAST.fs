@@ -40,9 +40,12 @@ and TCPList =
 
 type TCBindingPattern =
     | TCSimpleBindingPattern of string
-    | TCFunctionBindingPattern of FunctionBindPatternInfo
+    | TCFunctionBindingPattern of TCFunctionBindPatternInfo
     | TCComplexBindingPattern of TCPattern
 
+and TCFunctionBindPatternInfo =
+    { TypedArgs: (string * Type) list
+      Name: string }
 and TCStructField =
     { Loc: Span
       Name: string
@@ -133,8 +136,8 @@ and TCExpr =
         | TCNativeExpr (_, t) -> t
 
 and TCApply =
-    | TCApply of ((string * string list) * TCExpr list)
-    | TCNamedApply of ((string * string list) * (Span * (string * TCExpr)) list)
+    | TCApply of (ApplyIdentifier * TCExpr list)
+    | TCNamedApply of (ApplyIdentifier * (Span * (string * TCExpr)) list)
 
 and TCPipe =
     { Loc: Span
@@ -155,3 +158,11 @@ let tcModule (cmod: ChakraModule) exports bs =
       ExportMap = exports
       Bindings = bs
       Imports = cmod.Imports }
+
+
+let tcBinding (b: AST.ChakraBinding) patt el ty=
+    { Loc = b.Loc
+      TypedPattern = patt
+      TypedExprList = el
+      DocComment = b.DocComment
+      Typ = ty }

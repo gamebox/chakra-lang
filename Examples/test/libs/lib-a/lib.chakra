@@ -1,56 +1,65 @@
 = %(
-    number,
-    string,
-    function
+    init
 )
 
-%(
-    add,
-) = /stdlib
+%( io ) = /stdlib
 
-number = 1
+init(caps) =
+    io.print(caps.stdio, "Hello World!")
 
-string = "Some string"
+; = %(
+;     number,
+;     string,
+;     function
+; )
 
-function(a) = add(number, a)
+; %(
+;     add,
+; ) = /stdlib
 
-tuple = (number, string)
+; number = 1
 
-struct = %(
-    my-number = 3,
-)
+; string = "Some string"
 
-list = [number, 2, 3]
+; function(a) = add(number, a)
 
-map = %[
-    number = string,
-    2 = "Another string"
-]
+; tuple = (number, string)
 
-lambda =
-    { (a) ->
-        add(number, a) }
+; struct = %(
+;     my-number = 3,
+; )
 
-using-function = function(3)
+; list = [number, 2, 3]
 
-make(name, age) =
-    %(
-        name,
-        age
-    )
+; map = %[
+;     number = string,
+;     2 = "Another string"
+; ]
 
-complex(fn) =
-    some-num = 42
-    some-string = fn("Hello")
-    (some-num, some-string)
+; lambda =
+;     { (a) ->
+;         add(number, a) }
+
+; using-function = function(3)
+
+; make(name, age) =
+;     %(
+;         name,
+;         age
+;     )
+
+; complex(fn) =
+;     some-num = 42
+;     some-string = fn("Hello")
+;     (some-num, some-string)
 
 
 ; Uncomment when we add support for spread and struct field access
-zump(struct) =
-    %(
-        num = function(struct),
-        ...struct,
-    )
+; zump(struct) =
+;     %(
+;         num = function(struct),
+;         ...struct,
+;     )
 
 ; print(type) =
 ;     type ?

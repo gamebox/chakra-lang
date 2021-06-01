@@ -72,6 +72,8 @@ A module document would consist of the following broad segments
 
 #### Module summary
 
+- [ ] Write This
+
 #### Table of contents
 
 #### Type documentation

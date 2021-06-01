@@ -18,6 +18,8 @@
     <Compile Include="Annotate.fs" />
     <!-- <Compile Include="Unify.fs" /> -->
     <Compile Include="Command.fs" />
+    <Compile Include="IRState.fs" />
+    <Compile Include="Generate.fs" />
     <Compile Include="Build.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

@@ -8,10 +8,16 @@ type ASTNode =
     | ExprNode of ChakraExpr
     | ImportNode
     | ParamNode
+    | AbstractNode
 
     member x.IsParam =
         match x with
         | ParamNode -> true
+        | _ -> false
+
+    member x.IsAbstract =
+        match x with
+        | AbstractNode -> true
         | _ -> false
 
 type TypedASTNode =
@@ -60,6 +66,8 @@ let addImportNode id tg = addNode id ImportNode tg
 
 let addParamNode id tg = addNode id ParamNode tg
 
+let addAbstractNode id tg = addNode id AbstractNode tg
+
 let private addEdge from to' edge tg =
     if Map.containsKey from tg.Nodes
        && Map.containsKey to' tg.Nodes then
@@ -75,7 +83,9 @@ let private addEdge from to' edge tg =
     else
         tg
 
-let addDependentEdge from to' tg = addEdge from to' (DependsOn) tg
+let addDependentEdge from to' tg =
+    // printfn "Adding depedent edge from '%s' to '%s'" from to'
+    addEdge from to' (DependsOn) tg
 
 let addArgumentEdge from to' n tg = addEdge from to' (Argument n) tg
 
@@ -93,7 +103,9 @@ let addItemEdge from to' n tg = addEdge from to' (Item n) tg
 
 let addRestEdge from to' tg = addEdge from to' (Rest) tg
 
-let addApplyeeEdge from to' tg = addEdge from to' (Applyee) tg
+let addApplyeeEdge from to' tg =
+    // printfn "Adding applyee edge from '%s' to '%s'" from to'
+    addEdge from to' (Applyee) tg
 
 let rec addAnnotation n ty tg =
     let withNewAnno =
@@ -111,7 +123,7 @@ let rec addAnnotation n ty tg =
                 List.tryFind dependsOnParam rels
                 |> Option.map
                     (fun (_, s) ->
-                        printfn "The var at %s depends on param at %s" n s
+                        // printfn "The var at %s depends on param at %s" n s
                         addAnnotation s ty withNewAnno))
         |> Option.defaultValue withNewAnno
     | Some _ -> withNewAnno
@@ -119,8 +131,7 @@ let rec addAnnotation n ty tg =
 
 
 let hasNode node { Nodes = nodes } =
-    Map.tryFind node nodes
-    |> Option.map (fun _ -> node)
+    Map.containsKey node nodes
 
 let getNodeType node { Annotations = annos } = Map.tryFind node annos
 
@@ -145,9 +156,24 @@ let getDependents node { DownRelations = rels } =
     |> Option.map (fun deps -> List.map snd deps)
     |> Option.defaultWith (fun () -> [])
 
+let private getAllDependencies<'a> node (edgePredicate: (Relation * string) -> 'a list) { UpRelations = rels }  =
+    Map.tryFind node rels
+    |> Option.map (fun deps -> List.collect edgePredicate deps)
+    |> Option.defaultWith (fun () -> [])
+
 let private getDependencies node (edgePredicate: (Relation * string) -> string list) { UpRelations = rels } =
     Map.tryFind node rels
     |> Option.bind (fun deps -> List.collect edgePredicate deps |> List.tryHead)
+
+let getFields node tg =
+    getAllDependencies
+        node
+        (fun (rel, s) ->
+            match rel with
+            | Field f -> [ (f, s) ]
+            | _ -> [])
+        tg
+
 
 let getArg node n tg =
     getDependencies
@@ -186,7 +212,7 @@ let getPair node n tg =
         tg
     |> Option.bind
         (fun key ->
-            printfn "Found key at %s" key
+            // printfn "Found key at %s" key
 
             getDependencies
                 node
@@ -238,17 +264,20 @@ let findAnnotationTarget tg =
         Map.toSeq uprels
         |> Seq.tryFind
             (fun (k, rels) ->
-                let isParamNode = (Map.find k nodes).IsParam
+                let node = Map.find k nodes
+                let isParamNode = node.IsParam
+                let isAbstractNode = node.IsAbstract
 
                 (List.filter (fun (rel, dep) -> (Map.containsKey dep annos)) rels)
                     .Length
                 |> (=) rels.Length
                 |> (&&) (not isParamNode)
+                |> (&&) (not isAbstractNode)
                 |> (&&) (not (Map.containsKey k annos)))
         |> Option.map fst
 
     let applyWithApplyeeAnnotated () =
-        printfn "Looking for an apply expr with its applyee annotated"
+        // printfn "Looking for an apply expr with its applyee annotated"
         Map.toSeq nodes
         |> Seq.tryFind
             (fun (n, node) ->
@@ -266,7 +295,7 @@ let findAnnotationTarget tg =
         |> Option.map fst
 
     let unannotatedParamDep () =
-        printfn "Looking for unannotated parameter dependency"
+        // printfn "Looking for unannotated parameter dependency"
         Map.toSeq nodes
         |> Seq.filter (fun (n, node) ->
             node.IsParam && (not (Map.containsKey n annos)))
@@ -293,7 +322,12 @@ let findAnnotationLeaf
       UpRelations = rels
       Annotations = annos }
     =
-    Map.tryFindKey (fun k (v: (Relation * string) list) -> v.Length = 0 && not (Map.containsKey k annos)) rels
+    Map.tryFindKey
+        (fun k (v: (Relation * string) list) ->
+            let annotated =
+                List.filter (fun (r, s) -> (Map.containsKey s annos)) v
+            annotated.Length = v.Length && (not (Map.containsKey k annos)))
+        rels
 
 (* Display *)
 
@@ -303,6 +337,7 @@ classDef expr fill:#900, color:#fff
 classDef type fill:#090, color:#fff
 classDef param fill:#009, color:#fff, stroke: yellow, stroke-width: 4px
 classDef import fill:#009, color:#fff, stroke: green, stroke-width: 4px
+classDef abstract fill:#fff, color:#009, stroke: white, stroke-width: 4px
     "
 
 let private mermaidLegend = "
@@ -310,6 +345,7 @@ subgraph legend
     LEGEND_BINDING((BINDING)):::binding
     LEGEND_PARAM((PARAM)):::param
     LEGEND_IMPORT((IMPORT)):::import
+    LEGEND_ABSTRACT((ABSTRACT)):::abstract
     LEGEND_EXPR[EXPR]:::expr
     LEGEND_TYPE[/TYPE/]:::type
 end
@@ -329,6 +365,7 @@ let private mermaidNode (id, node) =
                 .Replace("\"", "&ldquo;"))
     | ImportNode -> sprintf "%s((\"%s\")):::import" id id
     | ParamNode -> sprintf "%s((\"%s\")):::param" id id
+    | AbstractNode -> sprintf "%s((\"%s\")):::abstract" id id
 
 let rec private mermaidPrintType typ =
     match typ with
