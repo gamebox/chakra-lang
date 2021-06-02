@@ -199,8 +199,7 @@ let verifyProject
 
 let generateIR proj =
     printPhase "Generating IR"
-    printfn "Modules\n--------\n%O" proj
-    Ok proj
+    Generate.generate proj (Set.empty)
 
 let writeToDisk proj =
     printPhase "Writing to disk"
