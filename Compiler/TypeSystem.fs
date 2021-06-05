@@ -43,6 +43,7 @@ type Type =
     | CommandType // A command to the system
     | CapabilityType of Capability // A capability to perform an action
     | RefType of Type // A reference to an Actor that takes a msg of Type
+    | ActorType of state: Type * msg: Type
     // ADT
     | GenericType of string // A type variable
     | UnionType of Type list // One or more different type
@@ -68,6 +69,7 @@ let union = UnionType
 let sum = SumType
 let cap = CapabilityType
 let cmd = CommandType
+let actor state msg = ActorType (state, msg)
 
 let genA = gen "a"
 let genB = gen "b"

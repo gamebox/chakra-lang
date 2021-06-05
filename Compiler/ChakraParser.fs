@@ -170,10 +170,9 @@ let pBaseIdentifier =
 
     let segment =
         upperOrLowerAlpha .>>. many lowerAlpha
-        <?> "identifier segment"
 
     let questionOrBangOrStar =
-        anyOf [ '?'; '!'; '*' ] <?> "idenitifier tail"
+        anyOf [ '?'; '!'; '*' ]
 
     let convertToIdentifier (((firstAlpha, restOfFirstSegment), otherSegments), maybeSign) =
         let firstSegment =

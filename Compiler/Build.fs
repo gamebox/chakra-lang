@@ -8,24 +8,6 @@ open AST
 open Pretty
 open TypedAST
 
-
-let cleaner lines =
-    // let docCommentRegex = Regex "^;;"
-    // let lineCommentRegex = Regex ";.*"
-    // let restoreDocCommentRegex = Regex "^--"
-
-    // let replace (regex: Regex) (replacement: string) str =
-    //     regex.Replace(str, replacement)
-
-    // let cleanLine line =
-    //     docCommentRegex.Replace (line, "--")
-    //     |> replace lineCommentRegex ""
-    //     |> replace restoreDocCommentRegex ";;"
-
-    // Seq.map cleanLine lines
-    // |> String.concat "\n"
-    String.concat "\n" lines
-
 let rec gatherFiles directory =
     let dirs =
         Directory.EnumerateDirectories(directory)
@@ -53,7 +35,7 @@ type BuildError =
     | BuildConfigNoNameError
     | BuildParseError of string * (ParserLabel * ParserError * ParserPosition)
     | BuildImportError
-    | BuildTypeError of Env.TypeError list
+    | BuildTypeError of TypeError.TypeError list
     | BuildIRError
     | BuildLinkError
     | BuildCompileError
@@ -179,10 +161,10 @@ let verifyProject
         let (stdlib: TCModule) =
             { DocComments = None
               Bindings = []
-              ExportMap = Map(Env.stdlibExports)
+              ExportMap = Map(Stdlib.stdlibExports)
               Imports = [] }
 
-        let blah (acc: Result<Map<string, TCModule>, Env.TypeError>) (path, module') =
+        let blah (acc: Result<Map<string, TCModule>, TypeError.TypeError>) (path, module') =
             match acc with
             | Ok envs ->
                 Annotate.annotate path module' envs
@@ -200,6 +182,7 @@ let verifyProject
 let generateIR proj =
     printPhase "Generating IR"
     Generate.generate proj (Set.empty)
+    |> Result.mapError (fun _ -> BuildIRError)
 
 let writeToDisk proj =
     printPhase "Writing to disk"

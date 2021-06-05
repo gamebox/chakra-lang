@@ -10,6 +10,7 @@
     <Compile Include="ParserLibrary.fs" />
     <Compile Include="AST.fs" />
     <Compile Include="TypeSystem.fs" />
+    <Compile Include="TypeError.fs" />
     <Compile Include="TypedAST.fs" />
     <Compile Include="ChakraParser.fs" />
     <Compile Include="Pretty.fs" />
@@ -21,6 +22,7 @@
     <Compile Include="Llvm.fs" />
     <Compile Include="IRState.fs" />
     <Compile Include="Generate.fs" />
+    <Compile Include="Stdlib.fs" />
     <Compile Include="Build.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

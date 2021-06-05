@@ -26,7 +26,7 @@ In many current languages, like C, C++, OCaml, and the .Net family, there is a c
 
 Another issue is that these files often have different syntaxes (or alternatives to the main syntax), different keywords, and sometimes arcane rules about how they interact with source. This complicates the language parser, and has a small impact on cognitive load on the developer while writing them. One could argue that this issue is marginal, but there is an effect and it could have an impact on the developer.
 
-The last issue that could be identified is that the structure of the generated documentation is often somewhat constrained by source order. This sometimes leads to source being organized around what best serves documentation rather than what best enables understanding and navigation of the source.
+The last issue that could be identified is that the structure of the generated documentation is often somewhat constrained by source order. This sometimes leads to source being organized around what best serves documentation rather than what best enables understanding and navigation of the source - or maybe just as bad: documentation with structure that meets the needs of the source but not the reader of the documentation.
 
 ### Markdown as plain-text, human readable header file
 

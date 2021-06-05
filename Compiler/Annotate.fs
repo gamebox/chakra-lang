@@ -685,7 +685,7 @@ let lowerIntoTypedAst (m: AST.ChakraModule) (tg: TypeGraph.TypeGraph) =
     let optToResult n opt =
         match opt with
         | Some v -> Ok v
-        | None -> Error (Env.UntypedError n)
+        | None -> Error (TypeError.UntypedError n)
 
     let collectExportBindingTypes acc (b: AST.ChakraBinding) =
         match acc with

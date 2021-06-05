@@ -31,9 +31,11 @@ typedef struct TurnResult {
   list__envelope_t *envelopes;
 } turn_result_t;
 
+typedef turn_result_t *(actor_receive_t)(void **state, msg_t *msg);
+
 typedef struct Actor {
   turn_result_t *(*init)(void **args);
-  turn_result_t *(*receive)(void *state, msg_t *msg);
+  actor_receive_t *receive;
 } actor_t;
 
 typedef struct RunningActor {

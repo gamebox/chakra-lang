@@ -40,7 +40,17 @@ let init target layout =
       Target = target
       Datalayout = layout }
 
-
+let func modName funcName ret argTypes =
+    { FuncName = funcName
+      ModName = modName
+      Ret = ret
+      Args = argTypes 
+      EntryBlock =
+        { Label = 0
+          Instructions = []
+          Terminator = Ret }
+      OtherBlocks = []
+      IsRecursive = false }
 
 (********************************************************
 *
@@ -50,16 +60,19 @@ let init target layout =
 
 let indent n s = sprintf "%s%s" (String.replicate n "    ") s
 
-let printChakraType (ty: TypeSystem.Type) =
+let rec printChakraType (ty: TypeSystem.Type) =
     match ty with
-    | TypeSystem.StructType _ -> "%()"
+    | TypeSystem.StructType (fields, _, _) ->
+        List.map (printChakraType << snd) fields
+        |> String.concat ", "
+        |> sprintf "{ %s }"
     | TypeSystem.FunctionType _ -> "type ()"
     | TypeSystem.CapabilityType _ -> "u64"
     | TypeSystem.CommandType _ -> "%Envelope_t"
     | _ -> raise (System.Exception ())
 
 let printConstant (i: int) (c: Const) =
-    sprintf "@%i = [%i x i32] c\"%s\"" i (c.Constant.Length + 1) c.Constant
+    sprintf "@%i = private unnamed_addr constant [%i x i8] c\"%s\"" i (c.Constant.Length + 1) c.Constant
 
 let printTerminal (t: TerminalInstructionType) =
     match t with
@@ -97,6 +110,8 @@ let print (m: Module) =
     let functions =
         List.map (printFunction) m.Functions
         |> String.concat "\n\n"
+
+    printfn "%s" functions
 
     sprintf
         "target datalayout=\"%s\"\ntarget triple=\"%s\"\n\n%s\n\n\n%s"

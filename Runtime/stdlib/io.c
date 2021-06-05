@@ -2,9 +2,9 @@
 
 #include "../actors.h"
 
-inline envelope_t *Chakra_stdlib__print(actor_id_t process_id, char *text) {
+inline envelope_t *Chakra_stdlib__print(unsigned long long cap, char *text) {
   envelope_t *env = (envelope_t *)malloc(sizeof(envelope_t));
-  *env = (envelope_t){.actor_id = process_id,
+  *env = (envelope_t){.actor_id = NULL,
                       .msg = {.type = "PRINT", .payload = (void *)text}};
 
   return env;
