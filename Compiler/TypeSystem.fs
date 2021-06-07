@@ -62,7 +62,10 @@ let mSym s moduleName =
 let tup = TupleType
 let list = ListType
 let map k v = MapType(k, v)
-let strct = StructType
+let strct (fields, isOpen, tag) =
+    let sortedFields =
+        List.sortBy (fun (name, ty) -> name) fields
+    StructType (sortedFields, isOpen, tag)
 let fn args retrn = FunctionType(args, retrn)
 let gen = GenericType
 let union = UnionType

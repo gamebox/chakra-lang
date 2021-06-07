@@ -3,9 +3,12 @@ module Llvm
 type InstructionType =
     | Call
     | GetElementPtr
+    | Load
 
 type TerminalInstructionType =
     | Ret
+    | Br
+    | Switch
 
 type Instruction =
     { Register: int

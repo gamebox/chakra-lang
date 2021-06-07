@@ -1,5 +1,8 @@
 module TypeError
 
+open TypeSystem
+open AST
+
 type TypeError =
     | FatalTypeError of string
     | UntypedError of varName: string

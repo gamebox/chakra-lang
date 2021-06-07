@@ -4,6 +4,7 @@
 #load "ParserLibrary.fs"
 #load "AST.fs"
 #load "TypeSystem.fs"
+#load "TypeError.fs"
 #load "TypedAST.fs"
 #load "ChakraParser.fs"
 #load "Pretty.fs"
@@ -13,6 +14,7 @@
 #load "Llvm.fs"
 #load "IRState.fs"
 #load "Generate.fs"
+#load "Stdlib.fs"
 #load "Build.fs"
 
 Build.build (Some "./Examples/test")
