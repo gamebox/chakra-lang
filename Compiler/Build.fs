@@ -22,13 +22,15 @@ let rec gatherFiles directory =
 
 type Project = Project of projectName: string * root: string * version: string
 
-type ParsedProjectInfo =
-    { ProjectName: string
-      Root: string
-      Version: string
-      Modules: Map<string, ChakraModule> }
+type ParsedModules = Map<string, ChakraModule>
 
-type ParsedProject = ParsedProject of ParsedProjectInfo
+type ParsedProject = ParsedProject of proj: Project * modules: ParsedModules
+
+type VerifiedModules = Map<string, TCModule>
+
+type VerifiedProject = VerifiedProject of proj: Project * modules: VerifiedModules
+
+type LoweredProject = LoweredProject of proj: Project * llvm: string
 
 type BuildError =
     | BuildIOError of string
@@ -119,11 +121,7 @@ let parseProjectFiles (Project (name, root, v)) =
     |> List.fold parseAllFiles (Ok [])
     |> Result.map
         (fun pairs ->
-            ParsedProject
-                { ProjectName = name
-                  Root = root
-                  Version = v
-                  Modules = Map pairs })
+            ParsedProject (Project (name, root, v), Map pairs))
 
 let importedModules ({ Imports = imports }: ChakraModule) modulePath =
     List.map
@@ -140,13 +138,8 @@ let importedModules ({ Imports = imports }: ChakraModule) modulePath =
 
 let relativePath root path = Path.GetRelativePath(root, path)
 
-let annotate path m envs = Ok(tcModule m (Map.empty) [])
-
 let verifyProject
-    (ParsedProject { ProjectName = name
-                     Root = root
-                     Version = v
-                     Modules = modules })
+    (ParsedProject (Project (name, root, v), modules))
     =
     printPhase "Verifying"
 
@@ -177,20 +170,33 @@ let verifyProject
 
         List.fold blah (Ok(Map [ "/stdlib", stdlib ])) sortedModules
         |> Result.mapError (fun e -> BuildTypeError [ e ])
+        |> Result.map (fun mods -> VerifiedProject (Project (name, root, v), mods))
     | None -> Error BuildImportError
 
-let generateIR proj =
+let generateIR (VerifiedProject (p, mods)) =
     printPhase "Generating IR"
-    Generate.generate proj (Set.empty)
+    Generate.generate mods (Set.empty)
     |> Result.mapError (fun _ -> BuildIRError)
+    |> Result.map (fun llvm -> LoweredProject (p, llvm))
 
-let writeToDisk proj =
+let writeToDisk (LoweredProject (Project (name, root, v), llvm)) =
     printPhase "Writing to disk"
-    Ok proj
+    // Make sure the local has a bin directory, if not create it
+    // Write the file to "PROJECT_NAME.ll"
+    let buildDir = sprintf "%s/.build" root
+    if not (System.IO.Directory.Exists buildDir) then
+       System.IO.Directory.CreateDirectory (buildDir)
+       |> ignore
+
+    let llvmPath = sprintf "%s/%s.ll" buildDir name
+    System.IO.File.WriteAllText (llvmPath, llvm)
+    Ok llvmPath
 
 let linkAndCompile proj =
     printPhase "Compiling executable"
-    Ok()
+    printfn "Makefile exists: %s" (System.IO.Path.GetFullPath ("./Makefile"))
+    printfn "Makefile exists: %O" (System.IO.File.Exists ("./Makefile"))
+    Ok ()
 
 let build optPath =
     let buildResult =
