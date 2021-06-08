@@ -9,3 +9,10 @@ inline envelope_t *Chakra_stdlib__print(unsigned long long cap, char *text) {
 
   return env;
 };
+
+typedef struct Chakra_stdlib__io_t {
+  envelope_t *(*print)(unsigned long long cap, char *text)
+};
+
+const struct Chakra_stdlib__io_t Chakra_stdlib__io = {.print =
+                                                          Chakra_stdlib__print}

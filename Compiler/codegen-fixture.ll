@@ -21,6 +21,19 @@ define noalias %struct.Envelope* @test__main__init({ i64 }* %0) {
     ret %struct.Envelope* %4
 }
 
+@Chakra_stdlib__io = dso_local global { %struct.Envelope* (i64, i8*)* } { %struct.Envelope* (i64, i8*)*  @Chakra_stdlib__print }, align 8
+
+@.const.0 = private unnamed_addr constant [13 x i8] c"Hello World!\00", align 1
+
+define noalias %struct.Envelope* @init({ i64 }* %0) {
+entry:
+    %1 = getelementptr inbounds { i64 }, { i64 }* %0, i64 0, i32 0
+    %2 = load i64, i64* %1, align 8
+    %3 = getelementptr inbounds { %struct.Envelope* (i64, i8*)* }, { %struct.Envelope* (i64, i8*)* }* @Chakra_stdlib__io, i64 0, i32 0
+    %4 = load %struct.Envelope* (i64, i8*)*, %struct.Envelope* (i64, i8*)** %3, align 8
+    %5 = tail call %struct.Envelope* %4(i64 %2, i8* getelementptr inbounds ([13 x i8], [13 x i8]* @.const.0, i64 0, i64 0))
+    ret %struct.Envelope* %5
+}
 
 ; %( commands ) = /stdlib
 ;
@@ -66,13 +79,13 @@ define %struct.TurnResult* @test_other__receive_ACTOR(i8* %0, i8* %1) {
     ret %struct.TurnResult* %9
 }
 
-define fastcc %struct.List__str* @Chakra_stdlib__list__map.num.str(i8* (i64) %arg0, %struct.List__num* %arg1) nounwind {
-    %1 = icmp i1 0, %struct.List__num* %arg1, %struct.List__num* null
-    br i1 %1, label %2, label %?
-2:
-    br label %return
-3:
+; define fastcc %struct.List__str* @Chakra_stdlib__list__map.num.str(i8* (i64) %arg0, %struct.List__num* %arg1) nounwind {
+;     %1 = icmp i1 0, %struct.List__num* %arg1, %struct.List__num* null
+;     br i1 %1, label %2, label %?
+; 2:
+;     br label %return
+; 3:
     
-return:
-    %? = phi %struct.List__num* [%2, null], []
-}
+; return:
+;     %? = phi %struct.List__num* [%2, null], []
+; }

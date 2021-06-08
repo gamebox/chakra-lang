@@ -1,6 +1,6 @@
 module Annotate
 
-
+open Operators
 
 (********************************************
 *
@@ -18,8 +18,6 @@ let inspect (label: string) (tg: TypeGraph.TypeGraph) =
     let diagram = TypeGraph.toMermaid tg true
     System.IO.File.WriteAllText(path, diagram)
     tg
-
-let (.>>.) res fn = Result.bind fn res
 
 let joinIds id ext =
     match id with
@@ -652,6 +650,7 @@ and lowerBinding id (b: AST.ChakraBinding) graph : TypedAST.TCBinding =
         TypedAST.tcBinding b (TypedAST.TCSimpleBindingPattern s) el ty
 
     | AST.ChakraFunctionBindingPattern patt ->
+        printfn "Lowering %s" patt.Name
         let id = joinIds id patt.Name
         let ty =
             TypeGraph.getNodeType id graph
@@ -663,6 +662,7 @@ and lowerBinding id (b: AST.ChakraBinding) graph : TypedAST.TCBinding =
             List.map
                 (fun arg ->
                     let id = joinIds id arg
+                    printfn "Arg is %s" arg
                     let ty =
                         TypeGraph.getNodeType id graph
                         |> Option.get
