@@ -6,7 +6,11 @@
 ],
 "settings": {
 	"files.associations": {
-		"run_table.h": "c"
+		"run_table.h": "c",
+		"stdlib.h": "c",
+		"channel.h": "c",
+		"sched.h": "c",
+		"actors.h": "c"
 	}
 }
 }

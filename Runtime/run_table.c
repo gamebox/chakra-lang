@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+#include "actors.h"
+
 const size_t TABLE_INIT_SIZE = 100;
 
 run_table_t *run_table_new() {

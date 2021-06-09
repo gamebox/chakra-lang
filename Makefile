@@ -5,9 +5,9 @@ override COMPILER_PROJECT_FILE=Compiler/Parser.fsproj
 COMPILER_CONFIGURATION=Release
 COMPILER_EXE=Compiler/bin/${COMPILER_CONFIGURATION}/netcoreapp3.1/Parser
 
-override RUNTIME_SOURCES := $(ls Runtime/*.{c,h})
-override RUNTIME_ARTIFACTS := $(ls Runtime/*.{o,a,s,ll,out})
-override RUNTIME_EXECUTABLE=Runtime/a.out
+RUNTIME_SOURCES=$(ls Runtime/**/*.{c,h})
+RUNTIME_ARTIFACTS=$(ls Runtime/*.{o,a,s,ll,out})
+RUNTIME_EXECUTABLE=Runtime/runtime.o
 
 
 ${COMPILER_EXE}: ${COMPILER_SOURCES} ${COMPILER_PROJECT_FILE}
@@ -25,7 +25,7 @@ compiler_clean: .PHONY
 
 runtime: ${RUNTIME_EXECUTABLE}
 	@echo "BUILDING RUNTIME USING SOURCES: ${RUNTIME_SOURCES}"
-	clang -gdwarf ${RUNTIME_SOURCES}
+	clang -c -gdwarf ${RUNTIME_SOURCES} -o Runtime/runtime.o
 
 runtime_clean: .PHONY
 	rm ${RUNTIME_ARTIFACTS}

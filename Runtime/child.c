@@ -30,14 +30,7 @@ void *child_process(void *arg) {
     actor_id_t recipient_id = buf->actor_id;
     envelope_t *env_to_handle = NULL;
 
-    // puts("--------------------------------------------------");
-    // printf("CHILD %d MSG RECEIVED\n", *id);
-    // printf("%s\n", buf->msg.type);
-    // actor_id_display(&buf->actor_id);
-    // puts("--------------------------------------------------");
-
     if (recipient_id.process != *id) {
-      fprintf(stderr, "The message is for process %d\n", recipient_id.process);
       continue;
     }
 
@@ -48,26 +41,18 @@ void *child_process(void *arg) {
       // 1. Call the init function on main actor struct, passing in an actor id
       // for this process
       if (strcmp(buf->msg.type, "SPAWN_REQUEST") == 0) {
-        // puts("Creating actor");
         if (buf->msg.payload == NULL) {
-          // puts("Request is NULL");
           break;
-        } else {
-          // printf("Request @ <%p>\n", buf->msg.payload);
         }
         spawn_request_t *spawn_request = (spawn_request_t *)buf->msg.payload;
         if (spawn_request == NULL) {
-          // puts("Request is NULL");
           break;
         }
         actor_t *Actor = spawn_request->def;
-        // printf("Actor->init @ <%p>\n", Actor);
         actor_id_t actor_id = process_add_actor(Actor, NULL);
         running_actor_t *ra = process_mount_actor(&actor_id);
         turn_result_t *res = Actor->init(spawn_request->init_args);
-        // puts("Actor->init END");
         if (res == NULL || ra == NULL) {
-          // puts("SOMETHING WENT WRONG");
           continue;
         }
         ra->state = res->state;
@@ -81,31 +66,24 @@ void *child_process(void *arg) {
             Chakra_stdlib__send(spawn_request->spawnee, spawnMsg);
 
         env_to_handle = spawned_env;
-        // puts("SPAWN COMPLETE");
       } else if (strcmp(buf->msg.type, "KILL") == 0) {
-        // printf("[PROCESS %d]: KILL", *id);
         actor_id_t *id = (actor_id_t *)buf->msg.payload;
-        actor_id_display(id);
         int delete_result = process_delete_actor(id);
-        // printf("KILLED? %d", delete_result);
       }
     } else {
-      // puts("MOUNTING");
-      actor_id_display(&recipient_id);
+      // Mounting
       msg_t msg = buf->msg;
       running_actor_t *a = process_mount_actor(&recipient_id);
       if (a == NULL || a->def == NULL) {
-        // puts("Missing def?");
         continue;
       }
-      // puts("MOUNTED");
+
       turn_result_t *res = a->def->receive(a->state, &msg);
       a->state = res->state;
       env_to_handle = res->envelope;
     }
 
     while (env_to_handle != NULL) {
-      // puts("WRITING ENVELOPE");
       process_write(*env_to_handle);
     }
 
