@@ -47,7 +47,7 @@ int main() {
   *actor_id = (actor_id_t){.process = 2, .entity = 0};
   args[0] = (void *)actor_id;
   // printf("MainActor->init @ <%p><%p>\n", &MainActor, &(MainActor.init));
-  envelope_t *env = Chakra_stdlib__spawn1(&MainActor, (void *)actor_id);
+  envelope_t *env = Chakra_boostrap(&MainActor, &Capabilities);
   env->actor_id = *actor_id;
 
   int writeResult = process_write(*env);

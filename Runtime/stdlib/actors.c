@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "../main.h"
 #include "../process.h"
 
 char *SPAWN_REQUEST = "SPAWN_REQUEST";
@@ -16,6 +17,10 @@ envelope_t *Chakra_stdlib__kill(actor_id_t actor_id) {
 
   return env;
 };
+
+envelope_t *Chakra_bootstrap(main_actor_t *actor, capabilities_t *caps) {
+  return actor->init(caps);
+}
 
 actor_id_t Chakra_stdlib__self() {
   actor_id_t *a = process_actor_running();

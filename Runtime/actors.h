@@ -28,7 +28,7 @@ typedef struct List__Envelope_t {
 
 typedef struct TurnResult {
   void *state;
-  list__envelope_t *envelopes;
+  envelope_t *envelope;
 } turn_result_t;
 
 typedef turn_result_t *(actor_receive_t)(void **state, msg_t *msg);

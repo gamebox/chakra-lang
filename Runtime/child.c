@@ -28,7 +28,7 @@ void *child_process(void *arg) {
     }
 
     actor_id_t recipient_id = buf->actor_id;
-    list__envelope_t *envs_to_handle = NULL;
+    envelope_t *env_to_handle = NULL;
 
     // puts("--------------------------------------------------");
     // printf("CHILD %d MSG RECEIVED\n", *id);
@@ -73,28 +73,14 @@ void *child_process(void *arg) {
         ra->state = res->state;
         // 2. Store the state and def, as well as entity id in a running_actor_t
         // 3. Handle the result(set state, write messages out)
-        envs_to_handle = res->envelopes;
+        env_to_handle = res->envelope;
         actor_id_t *payload = (actor_id_t *)malloc(sizeof(actor_id_t));
         *payload = actor_id;
         msg_t spawnMsg = {"SPAWNED", payload};
         envelope_t *spawned_env =
             Chakra_stdlib__send(spawn_request->spawnee, spawnMsg);
 
-        if (envs_to_handle == NULL) {
-          list__envelope_t *e =
-              (list__envelope_t *)malloc(sizeof(list__envelope_t));
-          *e = (list__envelope_t){spawned_env, NULL};
-          envs_to_handle = e;
-        } else {
-          list__envelope_t *e = envs_to_handle;
-          while (e->next != NULL) {
-            e = e->next;
-          }
-          list__envelope_t *e1 =
-              (list__envelope_t *)malloc(sizeof(list__envelope_t));
-          *e1 = (list__envelope_t){spawned_env, NULL};
-          e->next = e1;
-        }
+        env_to_handle = spawned_env;
         // puts("SPAWN COMPLETE");
       } else if (strcmp(buf->msg.type, "KILL") == 0) {
         // printf("[PROCESS %d]: KILL", *id);
@@ -115,21 +101,15 @@ void *child_process(void *arg) {
       // puts("MOUNTED");
       turn_result_t *res = a->def->receive(a->state, &msg);
       a->state = res->state;
-      envs_to_handle = res->envelopes;
+      env_to_handle = res->envelope;
     }
 
-    list__envelope_t *env_to_handle = envs_to_handle;
     while (env_to_handle != NULL) {
       // puts("WRITING ENVELOPE");
-      if (env_to_handle->item == NULL) {
-        // puts("No envelope?");
-        pthread_exit(NULL);
-      }
-      process_write(*env_to_handle->item);
-      env_to_handle = env_to_handle->next;
+      process_write(*env_to_handle);
     }
 
-    envs_to_handle = NULL;
+    env_to_handle = NULL;
   }
 
   fprintf(stderr, "CHILD %d CRASHED", *id);

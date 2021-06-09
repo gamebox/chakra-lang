@@ -13,3 +13,5 @@ entry:
     %5 = tail call %struct.Envelope* %4(i64 %2, i8* getelementptr inbounds ([13 x i8], [13 x i8]* @.const.0, i64 0, i64 0))
     ret %struct.Envelope* %5
 }
+
+@MainActor = global noalias %struct.MainActor { %struct.Envelope* ({ i64 }*)* @init }
