@@ -1,8 +1,9 @@
+#include <pthread.h>
 #include <stdlib.h>
 
 #if __linux__
-#include <sys/sysinfo.h>
 #include <sched.h>
+#include <sys/sysinfo.h>
 #endif
 
 #if __MACH__

@@ -20,6 +20,7 @@ void *child_process(void *arg) {
   while (1) {
     int readResult = process_read(buf, 0);
     if (readResult == -1) {
+      printf("Should die: %i", *id);
       break;
     }
 
@@ -31,8 +32,13 @@ void *child_process(void *arg) {
     envelope_t *env_to_handle = NULL;
 
     if (recipient_id.process != *id) {
+      // puts("not for me");
       continue;
     }
+
+    // puts("Child got message");
+    actor_id_display(&recipient_id);
+    puts(buf->msg.type);
 
     if (recipient_id.entity == 0) {
       // This is a message for the process itself, i.e., this is a command.
@@ -74,7 +80,8 @@ void *child_process(void *arg) {
       // Mounting
       msg_t msg = buf->msg;
       running_actor_t *a = process_mount_actor(&recipient_id);
-      if (a == NULL || a->def == NULL) {
+      if (a == NULL || a->def == NULL || a->def->receive == NULL) {
+        puts("Wah wah");
         continue;
       }
 
@@ -91,6 +98,6 @@ void *child_process(void *arg) {
   }
 
   fprintf(stderr, "CHILD %d CRASHED", *id);
-
+  puts("Exiting");
   exit(0);
 }

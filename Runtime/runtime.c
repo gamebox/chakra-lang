@@ -22,6 +22,7 @@
 #include "stdlib.h"
 
 int main() {
+  // puts("Started");
   int nprocs = get_nprocs();
   int process_id = 0;
 
@@ -48,7 +49,6 @@ int main() {
   args[0] = (void *)actor_id;
   // printf("MainActor->init @ <%p><%p>\n", &MainActor, &(MainActor.init));
   envelope_t *env = Chakra_bootstrap(&MainActor, &Capabilities);
-  env->actor_id = *actor_id;
 
   int writeResult = process_write(*env);
 
@@ -58,6 +58,7 @@ int main() {
     int readResult = process_read(env, 0);
 
     if (readResult == -1) {
+      puts("No messages - dying 0");
       break;
     }
 

@@ -19,6 +19,7 @@ envelope_t *Chakra_stdlib__kill(actor_id_t actor_id) {
 };
 
 envelope_t *Chakra_bootstrap(main_actor_t *actor, capabilities_t *caps) {
+  // puts("Bootstrap");
   return actor->init(caps);
 }
 

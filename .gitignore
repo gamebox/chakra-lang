@@ -269,3 +269,6 @@ Runtime/*.ll
 ### Examples
 
 Examples/**/.build/*
+
+### Build artifacts
+a.out

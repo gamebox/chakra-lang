@@ -11,5 +11,5 @@ int actor_id_cmp(actor_id_t a, actor_id_t b) {
 }
 
 void actor_id_display(actor_id_t *a) {
-  // printf("Actor Id <%zu.%zu>\n", a->process, a->entity);
+  printf("Actor Id <%zu.%zu>\n", a->process, a->entity);
 }
