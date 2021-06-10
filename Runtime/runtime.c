@@ -22,8 +22,7 @@
 #include "stdlib.h"
 
 int main() {
-  // puts("Started");
-  int nprocs = get_nprocs();
+  int nprocs = find_num_procs();
   int process_id = 0;
 
   coms = process_coms_new(nprocs);

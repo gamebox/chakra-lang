@@ -15,4 +15,4 @@ typedef struct cpu_set {
 #endif
 
 int set_cpu_affinity(pthread_t pid, int cpu);
-int get_nprocs();
+int find_num_procs();

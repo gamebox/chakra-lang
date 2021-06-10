@@ -123,6 +123,7 @@ let stdlib = """
 
 @Capabilities = global %struct.Capabilities { i64 0 }
 @Chakra_stdlib__io = external global { %struct.Envelope* (i64, i8*)* }
+@Chakra_stdlib__string = external global { i8* (i8*)* }
 @MainActor = global %struct.MainActor { %struct.Envelope* ({i64}*)* @init }
 
 """
@@ -142,7 +143,10 @@ let rec printChakraType (ty: TypeSystem.Type) =
     | TypeSystem.CapabilityType _ -> "i64"
     | TypeSystem.CommandType _ -> "%struct.Envelope*"
     | TypeSystem.StringType _ -> "i8*"
-    | _ -> raise (System.Exception())
+    | TypeSystem.NumberType -> "i64"
+    | _ ->
+        printfn "Got a type that I can't print yet: %O" ty
+        raise (System.Exception())
 
 let printConstant (i: int) (c: Const) =
     sprintf

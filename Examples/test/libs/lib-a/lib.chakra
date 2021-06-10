@@ -2,10 +2,10 @@
     init
 )
 
-%( io ) = /stdlib
+%( io, string ) = /stdlib
 
 init(caps) =
-    io.print(caps.stdio, "Hello World!")
+    io.print(caps.stdio, string.to-upper("hello world!"))
 
 ; = %(
 ;     number,
