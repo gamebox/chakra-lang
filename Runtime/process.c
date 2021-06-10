@@ -71,6 +71,7 @@ process_coms_t *process_coms_new(size_t num_procs) {
   coms->running_actors = running_actors;
   coms->run_tables = run_tables;
   coms->next_entities = next_entities;
+  coms->num_reading = 0;
 
   return coms;
 }
@@ -103,15 +104,25 @@ void process_coms_display() {
 // A process should only read their own buffer
 int process_read(envelope_t *buf, int timeout_ms) {
   size_t size = sizeof(envelope_t);
+  coms->num_reading = coms->num_reading + 1;
   // printf("[PROCESS %d]: READING %zu bytes from FD %d with %d ms timeout\n",
   //        process_id, size, coms->channels[process_id]->read_fd, timeout_ms);
   int res;
   res = timeout_ms > 0 ? TimeoutRead(coms->channels[process_id]->read_fd, buf,
                                      size, timeout_ms)
                        : read(coms->channels[process_id]->read_fd, buf, size);
-  // if (res >= 0) {
-  //   printf("[PROCESS %d]: READ\n", process_id);
-  // }
+  if (res == sizeof(envelope_t)) {
+    // printf("[PROCESS %d(%i bytes)]: READ\n", process_id, res);
+    coms->num_reading = coms->num_reading - 1;
+  } else if (coms->num_reading == coms->num_procs) {
+    // puts("SENDING KILL MESSAGE");
+    *buf =
+        (envelope_t){.actor_id = {.process = 999, .entity = 999}, .msg = NULL};
+    res = sizeof(envelope_t);
+  } else {
+    // printf("Num reading is %i/%i", coms->num_reading, coms->num_procs);
+    coms->num_reading = coms->num_reading - 1;
+  }
   return res;
 }
 

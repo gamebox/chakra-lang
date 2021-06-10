@@ -26,7 +26,7 @@ int main() {
   int nprocs = get_nprocs();
   int process_id = 0;
 
-  coms = process_coms_new(nprocs + 1);
+  coms = process_coms_new(nprocs);
   process_coms_display();
   actor_id_t self = {.process = 0, .entity = 0};
 
@@ -55,7 +55,9 @@ int main() {
   // printf("WROTE SPAWN? %d\n", writeResult);
 
   while (1) {
-    int readResult = process_read(env, 0);
+    // puts("About to read 0");
+    int readResult = process_read(env, 1);
+    // printf("Read %i", readResult);
 
     if (readResult == -1) {
       puts("No messages - dying 0");
@@ -63,10 +65,15 @@ int main() {
     }
 
     if (readResult == 0) {
+      // puts("No msgs 0");
       continue;
     }
 
     if (env != NULL) {
+      if (env->actor_id.process == 999) {
+        // puts("Received kill message");
+        break;
+      }
       // printf("PARENT MSG RECEIVED: `%s`\n", env->msg.type);
       if (strcmp(env->msg.type, "PRINT") == 0) {
         char *text = (char *)env->msg.payload;

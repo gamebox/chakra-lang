@@ -20,16 +20,22 @@ void *child_process(void *arg) {
   while (1) {
     int readResult = process_read(buf, 0);
     if (readResult == -1) {
-      printf("Should die: %i", *id);
+      // printf("Should die: %i", *id);
       break;
     }
 
     if (readResult == 0) {
+      // puts("Wut?");
       break;
     }
 
     actor_id_t recipient_id = buf->actor_id;
     envelope_t *env_to_handle = NULL;
+
+    if (recipient_id.process == 999) {
+      // puts("Received kill message");
+      break;
+    }
 
     if (recipient_id.process != *id) {
       // puts("not for me");
@@ -81,7 +87,7 @@ void *child_process(void *arg) {
       msg_t msg = buf->msg;
       running_actor_t *a = process_mount_actor(&recipient_id);
       if (a == NULL || a->def == NULL || a->def->receive == NULL) {
-        puts("Wah wah");
+        // puts("Wah wah");
         continue;
       }
 
@@ -90,14 +96,12 @@ void *child_process(void *arg) {
       env_to_handle = res->envelope;
     }
 
-    while (env_to_handle != NULL) {
-      process_write(*env_to_handle);
-    }
+    process_write(*env_to_handle);
 
     env_to_handle = NULL;
   }
 
-  fprintf(stderr, "CHILD %d CRASHED", *id);
-  puts("Exiting");
+  // fprintf(stderr, "CHILD %d CRASHED\n", *id);
+  // puts("Exiting");
   exit(0);
 }

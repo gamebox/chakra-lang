@@ -11,6 +11,7 @@ typedef struct ProcessComs {
     actor_id_t **running_actors;
     run_table_t **run_tables;
     size_t *next_entities;
+    size_t num_reading;
 } process_coms_t;
 
 extern process_coms_t *coms;
