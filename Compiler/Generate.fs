@@ -23,10 +23,10 @@ let genMake initTy stateTy msgTy state = state
 let inspect label s =
     match s with
     | Some x ->
-        printfn "%s" label
+        //printfn "%s" label
         s
     | None ->
-        printfn "FAILED: %s" label
+        //printfn "FAILED: %s" label
         s
 
 let generateStructAccess root path ty state =
@@ -124,7 +124,7 @@ and generateBinding (i, b) state =
             IRState.lastInstruction s
             .?>>. (fun i -> IRState.registerBinding name i b.Typ s))
     | TCFunctionBindingPattern info ->
-        printfn "Should add a function for %s" info.Name
+        // printfn "Should add a function for %s" info.Name
         let (TypeSystem.FunctionType (_, ret)) = b.Typ
 
         state

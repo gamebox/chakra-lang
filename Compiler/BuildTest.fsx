@@ -1,3 +1,4 @@
+#load "RunProcess.fs"
 #load "Operators.fs"
 #load "Graph.fs"
 #load "Codegen.fs"
@@ -18,4 +19,14 @@
 #load "Generate.fs"
 #load "Build.fs"
 
-Build.build (Some "./Examples/test")
+// Build.build (Some "./Examples/test")
+
+let str = 
+    """
+f(x) =
+    x ?
+    | #true -> 1
+    | #false -> 0
+    """.Trim([| '\n'; ' '; '\t' |])
+ParserLibrary.runOnInput (ChakraParser.chakraBinding) (ParserLibrary.fromStr str)
+|> ParserLibrary.printResult

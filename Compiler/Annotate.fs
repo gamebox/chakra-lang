@@ -28,6 +28,12 @@ let exprId id = sprintf "%s/$" id
 
 let structFieldId id name = sprintf "FIELD-%s" name |> joinIds id
 
+let pipeSegmentId id segment = sprintf "PIPE-SEGMENT-%i" segment |> joinIds id
+
+let matchHeadId id = joinIds id "MATCH-HEAD"
+let matchClauseELId id i = sprintf "MATCH-CLAUSE-EL-%i" i |> joinIds id
+let matchClausePatternId id i = sprintf "MATCH-CLAUSE-PATT-%i" i |> joinIds id
+
 let structAccessId root path =
     List.fold (fun previous segment -> structFieldId previous segment) root path
 
@@ -59,6 +65,17 @@ let withIndex list = List.mapi (fun i x -> (i, x)) list
 *
 *********************************************)
 
+let rec populatePattern name (patt: AST.ChakraPattern) graph =
+    match patt with
+    | AST.CPIgnore _ -> graph
+    | AST.CPVar _ -> graph
+    | AST.CPList _ -> graph
+    | AST.CPMap _ -> graph
+    | AST.CPNumber _ -> graph
+    | AST.CPString _ -> graph
+    | AST.CPStruct _ -> graph
+    | AST.CPSymbol _ -> graph
+    | AST.CPTuple _ -> graph
 
 let populateStructAccess from root path graph =
     findNodeForVar root from graph
@@ -250,8 +267,29 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
         withParamNodes tg'
         |> populateExprList n l.Body
         |> TypeGraph.addDependentEdge n (exprId n)
-    | AST.ChakraPipeExpr _ -> tg'
-    | AST.ChakraMatchExpr _ -> tg'
+    | AST.ChakraPipeExpr pipe ->
+        // TODO: add the previous apply as the next arg to the next apply
+        let linkPipeSegments graph (i, expr) =
+            let segment = pipeSegmentId n i
+            let prev = pipeSegmentId n (i - 1)
+            populateExpr segment expr graph
+            |> TypeGraph.addDependentEdge segment prev
+        
+        let tg'' = populateExpr (pipeSegmentId n 0) pipe.Head tg'
+
+        List.map (AST.ChakraApplyExpr) pipe.Tail
+        |> withIndex
+        |> List.fold linkPipeSegments tg''
+
+    | AST.ChakraMatchExpr (_, (AST.ChakraMatch (expr, clauses))) ->
+        let populateMatchClause graph (i, (AST.ChakraMatchClause (patt, exprList))) =
+            populateExprList (matchClauseELId n i) exprList graph
+            |> populatePattern (matchClausePatternId n i) patt
+
+        let tg'' = populateExpr (matchHeadId n) expr tg'
+        clauses
+        |> withIndex
+        |> List.fold (populateMatchClause) tg''
     | AST.ChakraNativeExpr _ -> tg'
 
 and populateExprList bname (AST.ChakraExprList (bs, expr)) tg =
@@ -582,7 +620,7 @@ let rec lowerExpr i (expr: AST.ChakraExpr) graph : TypedAST.TCExpr =
     let ty () =
         TypeGraph.getNodeType id graph |> Option.get
 
-    printfn "Expr ID is '%s' and the expr is:\n%O" id expr
+    // printfn "Expr ID is '%s' and the expr is:\n%O" id expr
 
     match expr with
     | AST.ChakraVar (loc, id) -> TypedAST.TCVar(id, (ty ()))
@@ -607,7 +645,7 @@ let rec lowerExpr i (expr: AST.ChakraExpr) graph : TypedAST.TCExpr =
                 List.map
                     (fun (i, expr) ->
                         let argId = joinIds id (sprintf "%i" i)
-                        printfn "Going to lower apply arg '%s'" argId
+                        // printfn "Going to lower apply arg '%s'" argId
                         lowerExpr argId expr graph)
                     (withIndex args)
 
@@ -633,7 +671,7 @@ and lowerBinding id (b: AST.ChakraBinding) graph : TypedAST.TCBinding =
         TypedAST.tcBinding b (TypedAST.TCSimpleBindingPattern s) el ty
 
     | AST.ChakraFunctionBindingPattern patt ->
-        printfn "Lowering %s" patt.Name
+        // printfn "Lowering %s" patt.Name
         let id = joinIds id patt.Name
 
         let ty =
@@ -645,7 +683,7 @@ and lowerBinding id (b: AST.ChakraBinding) graph : TypedAST.TCBinding =
             List.map
                 (fun arg ->
                     let id = joinIds id arg
-                    printfn "Arg is %s" arg
+                    // printfn "Arg is %s" arg
 
                     let ty =
                         TypeGraph.getNodeType id graph |> Option.get

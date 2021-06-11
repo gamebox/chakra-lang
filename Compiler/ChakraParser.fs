@@ -625,12 +625,21 @@ let chakraMatch =
 let pPipe = pchar '>'
 
 let chakraPipe =
+    let pipeHeadExpr =
+        choice [ chakraApplyExpr
+                 chakraVar
+                 chakraNumber
+                 chakraString
+                 chakraSymbol
+                 chakraList
+                 chakraMap
+                 chakraLambda ]
     let pipeStep =
         pPipe
         >>. many1 (pchar ' ')
         >>. withSpan chakraApply
 
-    chakraExpr .>> deadspace
+    pipeHeadExpr .>> deadspace
     .>>. sepBy1 pipeStep deadspace
     |> withSpan
     |>> fun (span, (head, tail)) -> { Loc = span; Head = head; Tail = tail }
@@ -770,8 +779,6 @@ let chakraModule modName =
 
         sepBy1 b (deadspace)
 
-    let t = returnP []
-
     (opt docComment) .>>. chakraModuleDef
     <?> "Module definition"
     .>> deadspace
@@ -792,17 +799,15 @@ let chakraModule modName =
 let chakraMetdata =
     moduleName := "METADATA"
 
-    let oldChakraExprRef = chakraExpr
-
-    chakraExprRef
-    := choice [ chakraNumber
-                chakraString
-                chakraSymbol
-                chakraList
-                chakraMap ]
+    let metadataExpr =
+        choice [ chakraNumber
+                 chakraString
+                 chakraSymbol
+                 chakraList
+                 chakraMap ]
 
     let metadataBinding =
-        pBaseIdentifier .>> equal .>>. chakraExpr
+        pBaseIdentifier .>> equal .>>. metadataExpr
         <?> "Metadata binding"
 
     let meta =
@@ -813,8 +818,6 @@ let chakraMetdata =
         .>> rightParen
         |>> Map
         <?> "Metadata file"
-
-    chakraExprRef := oldChakraExprRef
 
     meta
 
@@ -833,7 +836,9 @@ chakraPatternRef
    <?> "pattern"
 
 chakraExprRef
-:= choice [ chakraApplyExpr
+:= choice [ chakraPipeExpr
+            chakraMatchExpr
+            chakraApplyExpr
             chakraVar
             chakraNumber
             chakraString
@@ -842,9 +847,7 @@ chakraExprRef
             chakraList
             chakraStruct
             chakraMap
-            chakraLambda
-            chakraPipeExpr
-            chakraMatchExpr ]
+            chakraLambda ]
    <?> "expression"
 
 chakraExprListRef

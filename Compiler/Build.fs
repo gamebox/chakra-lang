@@ -8,14 +8,14 @@ open AST
 open Pretty
 open TypedAST
 
-let rec gatherFiles directory =
+let rec gatherFiles filter directory =
     let dirs =
         Directory.EnumerateDirectories(directory)
-        |> Seq.map gatherFiles
+        |> Seq.map (gatherFiles filter)
 
     let files =
         Directory.EnumerateFiles(directory)
-        |> Seq.filter (fun f -> f.EndsWith(".chakra"))
+        |> Seq.filter filter
         |> Seq.toList
 
     List.concat [ files; List.concat dirs ]
@@ -32,6 +32,8 @@ type VerifiedProject = VerifiedProject of proj: Project * modules: VerifiedModul
 
 type LoweredProject = LoweredProject of proj: Project * llvm: string
 
+type WrittenProject = WrittenProject of proj: Project * llvmPath: string
+
 type BuildError =
     | BuildIOError of string
     | BuildConfigNoNameError
@@ -44,7 +46,14 @@ type BuildError =
 
 let (.>>.) res fn = Result.bind fn res
 
-let printPhase phase = printfn "%s" (CConsole.blue phase)
+let printPhase phase timed =
+    let msg = CConsole.blue phase
+    if timed then
+        printf "%s" msg
+    else
+        printfn "%s" msg
+
+let printTime ms = printfn "...%sms" (CConsole.blue (sprintf "%d" ms))
 
 let fileContents path =
     try
@@ -63,7 +72,7 @@ let metadataPath projectPath =
                     "meta.chakra" |]
 
 let projectFromMetadata projectPath =
-    printPhase "Gathering Metadata"
+    printPhase "Gathering Metadata" false
     let metadataFilePath = metadataPath projectPath
     let parseMetadata = parseFile chakraMetdata
 
@@ -72,7 +81,7 @@ let projectFromMetadata projectPath =
         | (Some (ChakraString (_, name)), Some (ChakraString (s, v))) -> Ok(Project(name, projectPath, v))
         | (Some (ChakraString (_, name)), _) -> Ok(Project(name, projectPath, "0.0.1"))
         | (a, b) ->
-            printfn "%O\n%O" a b
+            // printfn "%O\n%O" a b
             Error BuildConfigNoNameError
 
     fileContents metadataFilePath
@@ -84,7 +93,7 @@ let modName (file: string) (root: string) =
     |> fun x -> x.Replace(root, "")
 
 let parseProjectFiles (Project (name, root, v)) =
-    printPhase "Parsing"
+    printPhase "Parsing" true
 
     let rec collectFiles path : string list =
         if File.GetAttributes path = FileAttributes.Directory then
@@ -117,10 +126,14 @@ let parseProjectFiles (Project (name, root, v)) =
 
 
 
-    collectFiles (Path.Combine(root, "libs"))
+    let f = collectFiles (Path.Combine(root, "libs"))
+    let timer = System.Diagnostics.Stopwatch.StartNew ()
+    f
     |> List.fold parseAllFiles (Ok [])
     |> Result.map
         (fun pairs ->
+            timer.Stop()
+            printTime timer.ElapsedMilliseconds
             ParsedProject (Project (name, root, v), Map pairs))
 
 let importedModules ({ Imports = imports }: ChakraModule) modulePath =
@@ -141,7 +154,7 @@ let relativePath root path = Path.GetRelativePath(root, path)
 let verifyProject
     (ParsedProject (Project (name, root, v), modules))
     =
-    printPhase "Verifying"
+    printPhase "Verifying" false
 
     let sortResult =
         Map.toList modules
@@ -174,13 +187,13 @@ let verifyProject
     | None -> Error BuildImportError
 
 let generateIR (VerifiedProject (p, mods)) =
-    printPhase "Generating IR"
+    printPhase "Generating IR" false
     Generate.generate mods (Set.empty)
     |> Result.mapError (fun _ -> BuildIRError)
     |> Result.map (fun llvm -> LoweredProject (p, llvm))
 
 let writeToDisk (LoweredProject (Project (name, root, v), llvm)) =
-    printPhase "Writing to disk"
+    printPhase "Writing to disk" false
     // Make sure the local has a bin directory, if not create it
     // Write the file to "PROJECT_NAME.ll"
     let buildDir = sprintf "%s/.build" root
@@ -190,13 +203,28 @@ let writeToDisk (LoweredProject (Project (name, root, v), llvm)) =
 
     let llvmPath = sprintf "%s/%s.ll" buildDir name
     System.IO.File.WriteAllText (llvmPath, llvm)
-    Ok llvmPath
+    Ok (WrittenProject (Project (name, root, v), llvmPath))
 
-let linkAndCompile proj =
-    printPhase "Compiling executable"
-    printfn "Makefile exists: %s" (System.IO.Path.GetFullPath ("./Makefile"))
-    printfn "Makefile exists: %O" (System.IO.File.Exists ("./Makefile"))
-    Ok ()
+let linkAndCompile (WrittenProject (Project (name, root, v), llvmPath)) =
+    printPhase "Compiling executable" false
+    let rtPath =
+        System.Environment.GetEnvironmentVariable ("CHAKRA_RUNTIME_PATH")
+        |> System.IO.Path.GetFullPath
+
+    let inputs =
+        gatherFiles (fun f -> f.EndsWith(".c") || f.EndsWith(".h")) rtPath
+        |> String.concat " "
+    let output = sprintf "%s/.build/%s" root name
+    let args = sprintf "%s %s -lpthread" inputs llvmPath
+    let (time, _, errs) = RunProcess.runProc "clang" args
+    match Seq.toList errs with
+    | [] ->
+        System.IO.File.Delete(output)
+        System.IO.File.Move("./a.out", output)
+        printfn "Wrote executable '%s' in %ims " output (time)
+        |> Ok
+    | _ ->
+        Error (BuildIOError (sprintf "Fai,led to write '%s' after %ims:\n\n%s" output time (String.concat "\n" errs)))
 
 let build optPath =
     let buildResult =
@@ -210,5 +238,5 @@ let build optPath =
         .>>. linkAndCompile
 
     match buildResult with
-    | Ok () -> printPhase "DONE"
+    | Ok () -> printPhase "DONE" false
     | Error err -> printfn "Build Error: %O" err

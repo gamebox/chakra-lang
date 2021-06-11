@@ -197,7 +197,13 @@ let printResult result = printfn "%s" (resultString result)
 
 
 
-let runOnInput parser input = parser.ParseFn input
+let runOnInput parser input =
+    printfn "[PARSER START] %s" parser.Label
+    let r = parser.ParseFn input
+    match r with
+    | Success _ -> printfn "[PARSER SUCCESS] %s" parser.Label
+    | Failure _ -> printfn "[PARSER FAILED] %s" parser.Label
+    r
 
 let run parser input = runOnInput parser (fromStr input)
 
@@ -233,7 +239,7 @@ let setLabel parser newLabel =
         match result with
         | Success s -> Success s
 
-        | Failure (oldLabel, err, pos) -> Failure(sprintf "%s > %s" newLabel oldLabel, err, pos)
+        | Failure (oldLabel, err, pos) -> Failure(newLabel, err, pos)
 
     { ParseFn = newInnerFn
       Label = newLabel }
@@ -359,6 +365,57 @@ let satisfy predicate label =
                 let pos = parserPositionFromInputState input
 
                 Failure(label, err, pos)
+
+    { ParseFn = innerFn; Label = label }
+
+let rec peeker str input i =
+    let remainingInput, charOpt = nextChar input
+
+    match charOpt with
+    | None ->
+        None
+
+    | Some c ->
+        let str' = sprintf "%s%c" str c
+        if i = 0 then
+            Some (str', remainingInput)
+        else
+            peeker str' remainingInput (i - 1)
+
+let rec consumer str input (regex: System.Text.RegularExpressions.Regex) =
+    let remainingInput, charOpt = nextChar input
+
+    match charOpt with
+    | None ->
+        (str, input)
+
+    | Some c ->
+        let str' = sprintf "%s%c" str c
+        if not (regex.IsMatch str') then
+            (str, input)
+        else
+            consumer str' remainingInput regex
+
+
+let regex (rx: System.Text.RegularExpressions.Regex) (peek: int) =
+    let label = rx.ToString ()
+    let innerFn input =
+        // Collect `peek` chars into a string and then test them
+        // against the regex
+        match peeker "" input peek with
+        | Some (str, input') ->
+            if rx.IsMatch str then
+                
+                Success (str, input')
+            else
+                let err = sprintf "Failed"
+                let pos = parserPositionFromInputState input
+                Failure (label, err, pos) 
+        | None ->
+            let err = sprintf "Expected at least %i characters" peek
+            let pos = parserPositionFromInputState input
+            Failure (label, err, pos)
+        // If it matches, keep taking until it no longer matches
 
     { ParseFn = innerFn; Label = label }
 

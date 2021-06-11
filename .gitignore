@@ -259,11 +259,11 @@ MyProject_coverage.xml
 
 ########################## RUNTIME
 
-Runtime/*.s
-Runtime/*.a
-Runtime/*.out
-Runtime/*.gch
-Runtime/*.ll
+*.s
+*.a
+*.out
+*.gch
+*.ll
 
 
 ### Examples

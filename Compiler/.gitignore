@@ -1,0 +1,4 @@
+.output*
+*.chromium.json
+*.speedscope.json
+*.nettrace

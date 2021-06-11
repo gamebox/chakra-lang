@@ -236,7 +236,7 @@ let print (m: Module) =
         List.map (printFunction constantMap) m.Functions
         |> String.concat "\n\n"
 
-    printfn "%s" functions
+    // printfn "%s" functions
 
     sprintf
         "target datalayout=\"%s\"\ntarget triple=\"%s\"\n\n%s\n\n%s\n\n\n%s"

@@ -1,6 +1,3 @@
-#ifndef CHAKRA_SCHED_H
-#define CHAKRA_SCHED_H
-
 #if __linux__
 #define _GNU_SOURCE
 
@@ -51,7 +48,5 @@ int find_num_procs() {
   //   return core_count;
   // }
 }
-
-#endif
 
 #endif

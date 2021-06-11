@@ -4,6 +4,7 @@
     <TargetFramework>net50</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="RunProcess.fs" />
     <Compile Include="Operators.fs" />
     <Compile Include="Graph.fs" />
     <Compile Include="Codegen.fs" />

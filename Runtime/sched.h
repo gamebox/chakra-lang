@@ -1,3 +1,6 @@
+#ifndef CHAKRA_SCHED_H
+#define CHAKRA_SCHED_H
+
 #include <pthread.h>
 #include <stdlib.h>
 
@@ -16,3 +19,5 @@ typedef struct cpu_set {
 
 int set_cpu_affinity(pthread_t pid, int cpu);
 int find_num_procs();
+
+#endif

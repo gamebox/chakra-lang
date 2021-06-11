@@ -69,7 +69,7 @@ let empty triple datalayout =
 
 
 let openModule modName state =
-    printfn "openingModule %s" modName
+    // printfn "openingModule %s" modName
 
     match state with
     | Init s ->
@@ -115,7 +115,7 @@ let registerPrototype name args ret (state: IRState) =
 let print (state: IRState) =
     match state with
     | Init { IRCurrentModule = m } ->
-        printfn "Raw Module\n~~~~~~~~~~~~~~~~~~~~\n%O\n~~~~~~~~~~~~~~~~~~~~~" m
+        // printfn "Raw Module\n~~~~~~~~~~~~~~~~~~~~\n%O\n~~~~~~~~~~~~~~~~~~~~~" m
         Llvm.print m |> Ok
     | _ -> Error "Could not print module while not in Init state"
 
@@ -162,7 +162,7 @@ let registerBinding ctx reg ty state =
     | _ -> None
 
 let private addArg state (idx, (name, ty)) =
-    printfn "arg name is %s" name
+    // printfn "arg name is %s" name
 
     registerBinding name (Llvm.localReg idx) ty state
     |> Option.get
@@ -179,7 +179,7 @@ let createScope state =
 let addFunction name ret args state =
     match state with
     | EditingMod s ->
-        printfn "Adding a function for %s" name
+        // printfn "Adding a function for %s" name
 
         let func =
             Llvm.func s.ChakraCurrentModule name ret (List.map snd args)
@@ -222,7 +222,7 @@ let editBasicBlock state =
 let completeFunction state =
     match state with
     | EditingFunc s ->
-        printfn "Completing current function %s" s.IRCurrentFunction.FuncName
+        // printfn "Completing current function %s" s.IRCurrentFunction.FuncName
 
         let m =
             { s.IRCurrentModule with
@@ -253,7 +253,7 @@ let findIdentifierForVar name state =
     match state with
     | EditingFunc s -> Env.find name s.Env
     | EditingBlock s ->
-        printfn "Current env:\n%O" s.Env
+        // printfn "Current env:\n%O" s.Env
         Env.find name s.Env
     | _ -> None
 
