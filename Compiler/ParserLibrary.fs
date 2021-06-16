@@ -198,11 +198,11 @@ let printResult result = printfn "%s" (resultString result)
 
 
 let runOnInput parser input =
-    printfn "[PARSER START] %s" parser.Label
+    // printfn "[PARSER START] %s" parser.Label
     let r = parser.ParseFn input
-    match r with
-    | Success _ -> printfn "[PARSER SUCCESS] %s" parser.Label
-    | Failure _ -> printfn "[PARSER FAILED] %s" parser.Label
+    // match r with
+    // | Success _ -> printfn "[PARSER SUCCESS] %s" parser.Label
+    // | Failure _ -> printfn "[PARSER FAILED] %s" parser.Label
     r
 
 let run parser input = runOnInput parser (fromStr input)

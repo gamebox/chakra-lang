@@ -11,7 +11,7 @@ type TCPattern =
     | TCPNumber of Span * Decimal
     | TCPSymbol of Span * string
     | TCPString of Span * string
-    | TCPTuple of Span * TCPattern list
+    | TCPTuple of Span * TCPattern list * Type list
     | TCPStruct of Span * TCPStruct
     | TCPList of Span * TCPList
     | TCPMap of Span * TCPMap
@@ -19,24 +19,31 @@ type TCPattern =
 and TCPStructField =
     { Loc: Span
       Name: string
-      ValuePattern: TCPattern }
+      ValuePattern: TCPattern
+      Typ: Type }
 
 and TCPStruct =
     { Fields: TCPStructField list
-      Rest: bool }
+      Rest: bool
+      Typ: Type }
 
 and TCPMapPair =
     { Loc: Span
       KeyPattern: TCPattern
-      ValuePattern: TCPattern }
+      ValuePattern: TCPattern
+      KeyType: Type
+      ValueType: Type }
 
 and TCPMap =
     { Pairs: TCPMapPair list
-      Rest: (Span * string) option }
+      Rest: (Span * string) option
+      KeyType: Type
+      ValueType: Type }
 
 and TCPList =
     { Items: TCPattern list
-      Rest: (Span * string) option }
+      Rest: (Span * string) option
+      Typ: Type }
 
 type TCBindingPattern =
     | TCSimpleBindingPattern of string
@@ -53,7 +60,8 @@ and TCStructField =
 
 and TCStruct =
     { Fields: TCStructField list
-      Spread: (Span * string) option }
+      Spread: (Span * string) option
+      Typ: Type }
 
 and TCMapPair =
     { Loc: Span
@@ -63,8 +71,7 @@ and TCMapPair =
 and TCMap =
     { Pairs: TCMapPair list
       Spread: (Span * string) option
-      KeyType: Type
-      ValueType: Type }
+      Typ: Type }
 
 and TCList =
     { Items: TCExpr list
@@ -76,7 +83,7 @@ and TCArg =
       ArgName: string
       Typ: Type }
 
-and TCLambda = { Args: TCArg list; Body: TCExprList }
+and TCLambda = { Args: TCArg list; Body: TCExprList; Typ: Type }
 
 and TCMatch = TCMatch of (TCExpr * Type * TCMatchClause list)
 
@@ -101,13 +108,13 @@ and TCExpr =
     | TCNumber of Decimal
     | TCSymbol of string
     | TCString of string
-    | TCTuple of TCExpr list
+    | TCTuple of TCExpr list * Type
     | TCStruct of TCStruct
     | TCList of TCList
     | TCMap of TCMap
-    | TCLambda of TCLambda
-    | TCMatchExpr of (Span * Type * TCMatch)
     | TCApplyExpr of (Span * Type * TCApply)
+    | TCLambda of TCLambda
+    | TCMatchExpr of (Span * TCMatch)
     | TCPipeExpr of TCPipe
     | TCNativeExpr of (Span * Type)
 
@@ -117,20 +124,12 @@ and TCExpr =
         | TCNumber _ -> num
         | TCSymbol string -> SymbolType string
         | TCString _ -> str
-        | TCTuple exprs -> exprs |> List.map (fun x -> x.Typ) |> tup
-        | TCStruct { Fields = fs; Spread = s } ->
-            let fields =
-                List.map (fun f -> (f.Name, f.TValue.Typ)) fs
-
-            strct (fields, s.IsSome, None)
+        | TCTuple (_, t) -> t
+        | TCStruct { Typ = ty } -> ty
         | TCList p -> p.Typ
-        | TCMap m -> map m.KeyType m.ValueType
-        | TCLambda l ->
-            let args =
-                List.map (fun a -> (a.ArgName, a.Typ)) l.Args
-
-            fn args l.Body.Typ
-        | TCMatchExpr (_, t, _) -> t
+        | TCMap m -> m.Typ
+        | TCLambda l -> l.Typ
+        | TCMatchExpr (_, TCMatch (_, t, _)) -> t
         | TCApplyExpr (_, t, _) -> t
         | TCPipeExpr pipe -> pipe.Typ
         | TCNativeExpr (_, t) -> t

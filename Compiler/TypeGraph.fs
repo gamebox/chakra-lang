@@ -6,6 +6,7 @@ open TypeSystem
 type ASTNode =
     | BindingNode of ChakraBinding
     | ExprNode of ChakraExpr
+    | PatternNode of ChakraPattern
     | ImportNode
     | ParamNode
     | AbstractNode
@@ -35,28 +36,26 @@ type Relation =
     | Item of int
     | Rest
     | Applyee
+    | PatternOf
 
-type TypeGraph =
+type TargetStrategy = (TypeGraph -> string option)
+
+and TypeGraph =
     { Nodes: Map<string, ASTNode>
       UpRelations: Map<string, (Relation * string) list>
       DownRelations: Map<string, (Relation * string) list>
       Annotations: Map<string, Type>
       Types: Set<Type>
-      AnnotatedNodes: Map<string, TypedASTNode> }
-
-let empty =
-    { Nodes = Map.empty
-      UpRelations = Map.empty
-      DownRelations = Map.empty
-      Annotations = Map.empty
-      Types = Set.empty
-      AnnotatedNodes = Map.empty }
+      AnnotatedNodes: Map<string, TypedASTNode>
+      CurrentStrategy: int
+      Strategies: TargetStrategy list }
 
 let private addNode id n tg =
     { tg with
           Nodes = Map.add id n tg.Nodes
           UpRelations = Map.add id [] tg.UpRelations
-          DownRelations = Map.add id [] tg.DownRelations }
+          DownRelations = Map.add id [] tg.DownRelations
+          CurrentStrategy = 0 }
 
 let addBindingNode id b tg = addNode id (BindingNode b) tg
 
@@ -67,6 +66,8 @@ let addImportNode id tg = addNode id ImportNode tg
 let addParamNode id tg = addNode id ParamNode tg
 
 let addAbstractNode id tg = addNode id AbstractNode tg
+
+let addPatternNode id p tg = addNode id (PatternNode p) tg
 
 let private addEdge from to' edge tg =
     if Map.containsKey from tg.Nodes
@@ -79,7 +80,8 @@ let private addEdge from to' edge tg =
 
         { tg with
               UpRelations = Map.add from fromRelations tg.UpRelations
-              DownRelations = Map.add to' toRelations tg.DownRelations }
+              DownRelations = Map.add to' toRelations tg.DownRelations
+              CurrentStrategy = 0}
     else
         tg
 
@@ -107,11 +109,15 @@ let addApplyeeEdge from to' tg =
     // printfn "Adding applyee edge from '%s' to '%s'" from to'
     addEdge from to' (Applyee) tg
 
+let addPatternEdge from to' tg =
+    addEdge from to' (PatternOf) tg
+
 let rec addAnnotation n ty tg =
     let withNewAnno =
         { tg with
               Annotations = Map.add n ty tg.Annotations
-              Types = Set.add ty tg.Types }
+              Types = Set.add ty tg.Types
+              CurrentStrategy = 0 }
 
     match Map.tryFind n withNewAnno.Nodes with
     | Some (ExprNode (ChakraVar _)) ->
@@ -252,15 +258,16 @@ let getParam node n tg =
             | _ -> [])
         tg
 
-/// Finds the next node that can be annotated.  Skips nodes that are a parameter.
-let findAnnotationTarget tg =
-    let { Nodes = nodes
-          UpRelations = uprels
-          DownRelations = deprels
-          Annotations = annos } =
-        tg
+let attemptNextStrategy tg =
+    printfn "Will attempt next strategy"
+    List.tryItem (tg.CurrentStrategy + 1) tg.Strategies
+    |> Option.map (fun i -> { tg with CurrentStrategy = tg.CurrentStrategy + 1})
 
-    let primaryTarget =
+let primaryTarget
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = deprels
+       Annotations = annos }) =
         Map.toSeq uprels
         |> Seq.tryFind
             (fun (k, rels) ->
@@ -276,7 +283,9 @@ let findAnnotationTarget tg =
                 |> (&&) (not (Map.containsKey k annos)))
         |> Option.map fst
 
-    let applyWithApplyeeAnnotated () =
+let applyWithApplyeeAnnotated tg =
+        let { Nodes = nodes
+              Annotations = annos } = tg
         // printfn "Looking for an apply expr with its applyee annotated"
         Map.toSeq nodes
         |> Seq.tryFind
@@ -294,7 +303,10 @@ let findAnnotationTarget tg =
                 | _ -> false)
         |> Option.map fst
 
-    let unannotatedParamDep () =
+let unannotatedParamDep
+    { Nodes = nodes
+      DownRelations = deprels
+      Annotations = annos } =
         // printfn "Looking for unannotated parameter dependency"
         Map.toSeq nodes
         |> Seq.filter (fun (n, node) ->
@@ -313,13 +325,25 @@ let findAnnotationTarget tg =
         |> Seq.tryHead
         |> Option.map snd
 
-    primaryTarget
-    |> Option.orElseWith applyWithApplyeeAnnotated
+/// Finds the next node that can be annotated following a progression of different strategies.
+let rec findAnnotationTarget tg =
+    // TODO: Add a AnnotationTargetStage field to TypeGraph.
+    //       Based on that stage choose the below target type to look for.
+    //       Then, add a `attemptNextTarget` function that moves to the next TargetStage
+    //       The user can then try to find a target again
+    //       This stage is reset to the first everytime we add an annotation.
+    printfn "Attempting to find annotation target with strategy %i" tg.CurrentStrategy
+    match (List.item tg.CurrentStrategy tg.Strategies) tg with
+    | Some node -> Some node
+    | None ->
+        match attemptNextStrategy tg with
+        | None -> None
+        | Some tg' -> findAnnotationTarget tg'
+        
     // |> Option.orElseWith unannotatedParamDep
 
 let findAnnotationLeaf
-    { Nodes = nodes
-      UpRelations = rels
+    { UpRelations = rels
       Annotations = annos }
     =
     Map.tryFindKey
@@ -329,6 +353,29 @@ let findAnnotationLeaf
             annotated.Length = v.Length && (not (Map.containsKey k annos)))
         rels
 
+let empty =
+    { Nodes = Map.empty
+      UpRelations = Map.empty
+      DownRelations = Map.empty
+      Annotations = Map.empty
+      Types = Set.empty
+      AnnotatedNodes = Map.empty
+      CurrentStrategy = 0
+      Strategies = [
+          primaryTarget
+          applyWithApplyeeAnnotated
+          unannotatedParamDep
+          findAnnotationLeaf
+      ] }
+
+let equal tg1 tg2 = 
+    tg1.Nodes = tg2.Nodes
+    |> (&&) (tg1.UpRelations = tg2.UpRelations)
+    |> (&&) (tg1.DownRelations = tg2.DownRelations)
+    |> (&&) (tg1.Annotations = tg2.Annotations)
+    |> (&&) (tg1.Types = tg2.Types)
+    |> (&&) (tg1.AnnotatedNodes = tg2.AnnotatedNodes)
+    |> (&&) (tg1.CurrentStrategy = tg2.CurrentStrategy)
 (* Display *)
 
 let private mermaidClasses = "
@@ -338,6 +385,7 @@ classDef type fill:#090, color:#fff
 classDef param fill:#009, color:#fff, stroke: yellow, stroke-width: 4px
 classDef import fill:#009, color:#fff, stroke: green, stroke-width: 4px
 classDef abstract fill:#fff, color:#009, stroke: white, stroke-width: 4px
+classDef pattern fill:#fff, color:#090, stroke: #090, stroke-width: 4px
     "
 
 let private mermaidLegend = "
@@ -366,6 +414,12 @@ let private mermaidNode (id, node) =
     | ImportNode -> sprintf "%s((\"%s\")):::import" id id
     | ParamNode -> sprintf "%s((\"%s\")):::param" id id
     | AbstractNode -> sprintf "%s((\"%s\")):::abstract" id id
+    | PatternNode p ->
+        sprintf
+            "%s[\"%s\"]:::pattern"
+            id
+            ((firstNChars (Pretty.pretty 30 (Pretty.showPattern p)) 20)
+                .Replace("\"", "&ldquo;"))
 
 let rec private mermaidPrintType typ =
     match typ with
@@ -458,6 +512,7 @@ let private mermaidRelToEdge rel =
     | Item i -> sprintf "-->| listitem %i |" i
     | Rest -> "-->| rest |"
     | Applyee -> "-->| applyee |"
+    | PatternOf -> "-->| pattern |"
 
 let private mermaidEdge (from, (edge, to')) =
     sprintf "%s %s %s" from (mermaidRelToEdge edge) to'

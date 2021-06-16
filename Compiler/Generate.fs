@@ -52,8 +52,45 @@ let generateStructAccess root path ty state =
         IRState.addGepInstruction id ty' idxs state
         |> inspect "added GEP instruction")
 
+let rec generateMatchBlocks expr clauses state =
+    let findExactMatch matchee (TCMatchClause (p, _)) = matchee p 
+    match expr with
+    // Literal constants - there may be opporunities for dead code elimination here
+    | TCNumber d ->
+        match List.tryFind (findExactMatch (fun p -> match p with | TCPNumber (_, dp) -> dp = d | _ -> false)) clauses with
+        | Some (TCMatchClause (_, el)) ->
+            // Inline expression list of this clause, and eliminate other clauses completely
+            generateExprList el state
+        | None ->
+            raise (System.Exception ())
+    | TCString s ->
+        match List.tryFind (findExactMatch (fun p -> match p with | TCPSymbol (_, sp) -> sp = s | _ -> false)) clauses with
+        | Some (TCMatchClause (_, el)) ->
+            // Inline expression list of this clause, and eliminate other clauses completely
+            generateExprList el state
+        | None ->
+            raise (System.Exception ())
+    | TCSymbol s ->
+        match List.tryFind (findExactMatch (fun p -> match p with | TCPSymbol (_, sp) -> sp = s | _ -> false)) clauses with
+        | Some (TCMatchClause (_, el)) ->
+            // Inline expression list of this clause, and eliminate other clauses completely
+            generateExprList el state
+        | None ->
+            raise (System.Exception ())
+    | TCTuple _ ->
+        Some state
+    | TCStruct _ ->
+        Some state
+    | TCList _ ->
+        Some state
+    | TCMap _ ->
+        Some state
+    | TCVar _ | TCApplyExpr _ ->
+        let ty = expr.Typ
+        
+    | _ -> raise (System.Exception (sprintf "The type below is not supported in a match head:\n%O" expr.Typ))
 
-let rec generateExprList (TCExprList (bs, e)) state =
+and generateExprList (TCExprList (bs, e)) state =
     IRState.createScope state
     |> inspect "New scope created"
     .?>>. generateBindings bs
@@ -75,8 +112,10 @@ and generateExpr (expr: TypedAST.TCExpr) (state: IRState.IRState) =
     | TCString s ->
         // Create constant for string
         // Return constant name
-        IRState.addConstant s state
+        IRState.addStringConstant s state
         |> inspect "added constant for string"
+    | TCNumber d ->
+        IRState.addNumberConstant d state
     | TCApplyExpr (_, ty, app) ->
         match app with
         | TCApply ((root, []), args) -> None
@@ -88,10 +127,12 @@ and generateExpr (expr: TypedAST.TCExpr) (state: IRState.IRState) =
             // insert a call instruction for the function at the register
             let (args', state') =
                 List.fold
-                    (fun (args', state) (i, arg: TCExpr) ->
+                    (fun (args', state) (idx, arg: TCExpr) ->
                         let blah s =
                             IRState.lastInstruction s
-                            .<?>. (fun i -> ((i, arg.Typ) :: args', Some s))
+                            .<?>. (fun i ->
+                                printfn "Id for arg %i is %O" idx i
+                                ((i, arg.Typ) :: args', Some s))
                             |> Option.defaultValue ([], None)
 
                         let x =
@@ -102,6 +143,7 @@ and generateExpr (expr: TypedAST.TCExpr) (state: IRState.IRState) =
                     ([], Some state)
                     (List.mapi (.<.>.) args)
 
+            printfn "Applying %s" (root::path |> String.concat ".")
 
             state'
             .?>>. generateStructAccess root path ty
@@ -114,7 +156,10 @@ and generateExpr (expr: TypedAST.TCExpr) (state: IRState.IRState) =
             |> inspect "generated struct access for applyee"
             .?>>. (fun s -> IRState.addCallInstruction ty (IRState.lastInstruction s |> Option.get) (List.rev args') s)
         | _ -> None
-    | _ -> Some state
+    | TCMatchExpr (_ , TCMatch (expr, t, clauses)) ->
+        generateExpr expr state
+        .?>>. generateMatchBlocks expr clauses
+    | _ -> raise (System.Exception (sprintf "Generation not yet supported: %O" expr))
 
 and generateBinding (i, b) state =
     match b.TypedPattern with

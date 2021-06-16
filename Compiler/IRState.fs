@@ -7,6 +7,7 @@ type IREnv = Env.Env<Llvm.Identifier * TypeSystem.Type>
 type GenericPrototype =
     { GenericArgTys: TypeSystem.Type list
       GenericRetTy: TypeSystem.Type
+      Binding: TypedAST.TCBinding
       Instantiations: Set<Map<TypeSystem.Type, TypeSystem.Type>> }
 
 type EditingBlockState =
@@ -88,10 +89,11 @@ let openModule modName state =
         |> Some
     | _ -> None
 
-let registerPrototype name args ret (state: IRState) =
+let registerPrototype name args ret b (state: IRState) =
     let prototype =
         { GenericArgTys = args
           GenericRetTy = ret
+          Binding = b
           Instantiations = Set.empty }
 
     match state with
@@ -201,23 +203,22 @@ let addFunction name ret args state =
 *
 ********************************************************)
 
-
-let editBasicBlock state =
+let editBasicBlock label state =
     match state with
     | EditingFunc s ->
-        let block = s.IRCurrentFunction.EntryBlock
-
-        EditingBlock
-            { IRCurrentFunction = s.IRCurrentFunction
-              ChakraCurrentModule = s.ChakraCurrentModule
-              IRCurrentModule = s.IRCurrentModule
-              IRGenerics = s.IRGenerics
-              Env = s.Env
-              LastInstruction = s.LastInstruction
-              IRCurrentBlock = block }
-        |> Some
+        Llvm.findBasicBlock label s.IRCurrentFunction
+        .<?>. (fun b ->
+            EditingBlock
+                { IRCurrentFunction = s.IRCurrentFunction
+                  ChakraCurrentModule = s.ChakraCurrentModule
+                  IRCurrentModule = s.IRCurrentModule
+                  IRGenerics = s.IRGenerics
+                  Env = s.Env
+                  LastInstruction = s.LastInstruction
+                  IRCurrentBlock = b })
     | _ -> None
 
+let editEntryBlock state = editBasicBlock "entry" state
 
 let completeFunction state =
     match state with
@@ -263,6 +264,39 @@ let findIdentifierForVar name state =
 *
 ********************************************************)
 
+let currentBlockLabel state =
+    match state with
+    | EditingBlock s ->
+        Some s.IRCurrentBlock.Label
+    | _ -> None
+
+let private unloadCurrentBlock state = 
+    match state with
+    | EditingBlock s ->
+        let f = Llvm.saveBasicBlock s.IRCurrentBlock s.IRCurrentFunction
+        EditingFunc
+            { IRCurrentFunction = f
+              ChakraCurrentModule = s.ChakraCurrentModule
+              IRCurrentModule = s.IRCurrentModule
+              IRGenerics = s.IRGenerics
+              LastInstruction = s.LastInstruction
+              Env = s.Env }
+        |> Some
+    | _ -> None
+
+// TODO: Need a function to load a block with a label
+let loadBlock label state =
+    match state with
+    | EditingBlock s ->
+        if s.IRCurrentBlock.Label = label then
+            Some state
+        else
+            unloadCurrentBlock state
+            .<?>. (fun s ->
+                Llvm.findBasicBlock label s.IRCurrentFunction
+                )
+    | _ -> None
+
 
 let completeEntryBlockWithRet ty state =
     match state with
@@ -300,10 +334,22 @@ let addPrototypeInstance name mappings state =
                           IRGenerics = Map.add name p s.IRGenerics })
     | _ -> None
 
-let addConstant str state =
+let addStringConstant str state =
     match state with
     | EditingBlock s ->
-        let (id, m) = Llvm.addConstant str s.IRCurrentModule
+        let (id, m) = Llvm.addStringConstant str s.IRCurrentModule
+
+        EditingBlock
+            { s with
+                  IRCurrentModule = m
+                  LastInstruction = id }
+        |> Some
+    | _ -> None
+
+let addNumberConstant d state =
+    match state with
+    | EditingBlock s ->
+        let (id, m) = Llvm.addNumberConstant d s.IRCurrentModule
 
         EditingBlock
             { s with

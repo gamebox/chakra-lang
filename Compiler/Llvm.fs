@@ -34,10 +34,12 @@ type Func =
       Ret: TypeSystem.Type
       Args: TypeSystem.Type list
       EntryBlock: BasicBlock
-      OtherBlocks: BasicBlock list
+      OtherBlocks: Map<string, BasicBlock>
       IsRecursive: bool }
 
-type Const = { Constant: string }
+type Const =
+    | StringConstant of string
+    | NumberConstant of System.Decimal
 
 type Module =
     { Constants: Const list
@@ -60,17 +62,37 @@ let func modName funcName ret argTypes =
           { Label = "entry"
             Instructions = []
             Terminator = Ret(TypeSystem.num, LocalReg 0) }
-      OtherBlocks = []
+      OtherBlocks = Map.empty
       IsRecursive = false }
 
-
-let addConstant s (m: Module) =
+let addStringConstant s (m: Module) =
     let n = m.Constants.Length
     let id = sprintf ".const.%i" n |> GlobalId
 
     (id,
      { m with
-           Constants = { Constant = s } :: m.Constants })
+           Constants = StringConstant s :: m.Constants })
+
+let addNumberConstant d (m: Module) =
+    let n = m.Constants.Length
+    let id = sprintf ".const.%i" n |> GlobalId
+
+    (id, { m with Constants = NumberConstant d :: m.Constants})
+
+let addBasicBlock block (f: Func) =
+    { f with OtherBlocks = Map.add block.Label block f.OtherBlocks }
+
+let findBasicBlock label (f: Func) =
+    if label = "entry" then
+        Some f.EntryBlock
+    else
+        Map.tryFind label f.OtherBlocks
+
+let saveBasicBlock block (f: Func) =
+    if block.Label = "entry" then
+        { f with EntryBlock = block }
+    else
+        { f with OtherBlocks = Map.add block.Label block f.OtherBlocks }
 
 
 (********************************************************
@@ -78,6 +100,8 @@ let addConstant s (m: Module) =
 *  Instructions constructors
 *
 ********************************************************)
+
+
 let private ins reg it = { Register = reg; Instruction = it }
 
 let globalId = GlobalId
@@ -92,6 +116,8 @@ let call retTy func args reg = ins reg (Call(retTy, func, args))
 let load ty source reg = ins reg (Load(ty, source))
 
 let ret ty id = Ret(ty, id)
+
+
 (********************************************************
 *
 *  Basic Block operations
@@ -149,11 +175,16 @@ let rec printChakraType (ty: TypeSystem.Type) =
         raise (System.Exception())
 
 let printConstant (i: int) (c: Const) =
-    sprintf
-        "@.const.%i = private unnamed_addr constant [%i x i8] c\"%s\\00\", align 1"
-        i
-        (c.Constant.Length + 1)
-        c.Constant
+    match c with
+    | StringConstant s ->
+        sprintf
+            "@.const.%i = private unnamed_addr constant [%i x i8] c\"%s\\00\", align 1"
+            i
+            (s.Length + 1)
+            s
+    | NumberConstant d ->
+        sprintf
+            "@.const.%i = private unnamed_addr constant i64 %s" i (d.ToString ())
 
 let printId id =
     match id with
@@ -173,12 +204,16 @@ let printCallArg constants (id, ty) =
     match id with
     | GlobalId s ->
         let c = Map.find s constants
-        let len = c.Constant.Length + 1
+        match c with
+        | StringConstant s ->
+            let len = s.Length + 1
 
-        let gep =
-            sprintf "getelementptr inbounds ([%i x i8], [%i x i8]* %s, i64 0, i64 0)" len len (printId id)
+            let gep =
+                sprintf "getelementptr inbounds ([%i x i8], [%i x i8]* %s, i64 0, i64 0)" len len (printId id)
 
-        sprintf "%s %s" (printChakraType ty) gep
+            sprintf "%s %s" (printChakraType ty) gep
+        | NumberConstant d ->
+            sprintf "i64 %s" (printId id)
     | LocalReg n -> sprintf "%s %s" (printChakraType ty) (printId id)
 
 let printInstruction constants (i: Instruction) =
@@ -219,18 +254,18 @@ let printFunction constants (f: Func) =
         List.mapi (printArg) f.Args |> String.concat ", "
 
     let printedBlocks =
-        List.map (printBlock constants) (f.EntryBlock :: f.OtherBlocks)
+        List.map (printBlock constants) (f.EntryBlock :: (Map.toList f.OtherBlocks |> List.map snd))
         |> String.concat "\n"
 
     sprintf "define noalias %s @%s(%s) {\n%s}" (printChakraType f.Ret) f.FuncName printedArgs printedBlocks
 
 let print (m: Module) =
     let constants =
-        List.mapi (printConstant) m.Constants
+        List.mapi (printConstant) (List.rev m.Constants)
         |> String.concat "\n"
 
     let constantMap =
-        Map(List.mapi (fun i c -> (sprintf ".const.%i" i, c)) m.Constants)
+        Map(List.mapi (fun i c -> (sprintf ".const.%i" i, c)) (List.rev m.Constants))
 
     let functions =
         List.map (printFunction constantMap) m.Functions

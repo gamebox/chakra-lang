@@ -5,7 +5,11 @@
 %( io, string ) = /stdlib
 
 init(caps) =
-    io.print(caps.stdio, string.to-upper("hello world!"))
+    1 ?
+    | 1 ->
+        io.print(caps.stdio, string.to-upper("hello world!"))
+    | _ ->
+        io.print(caps.stdio, string.to-upper("should never happen..."))
 
 ; = %(
 ;     number,
