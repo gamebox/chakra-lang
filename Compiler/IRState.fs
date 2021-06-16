@@ -20,7 +20,10 @@ type EditingBlockState =
       Env: IREnv }
 
     member x.TotalNumOfInstructions =
-        List.sumBy (fun (b: Llvm.BasicBlock) -> b.Instructions.Length) x.IRCurrentFunction.OtherBlocks
+        List.sumBy
+            (fun (b: Llvm.BasicBlock) -> b.Instructions.Length)
+            (Map.toList x.IRCurrentFunction.OtherBlocks
+             |> List.map snd)
         |> (+) x.IRCurrentFunction.EntryBlock.Instructions.Length
         |> (+) x.IRCurrentBlock.Instructions.Length
         |> (+) x.IRCurrentFunction.Args.Length
@@ -266,14 +269,15 @@ let findIdentifierForVar name state =
 
 let currentBlockLabel state =
     match state with
-    | EditingBlock s ->
-        Some s.IRCurrentBlock.Label
+    | EditingBlock s -> Some s.IRCurrentBlock.Label
     | _ -> None
 
-let private unloadCurrentBlock state = 
+let private unloadCurrentBlock state =
     match state with
     | EditingBlock s ->
-        let f = Llvm.saveBasicBlock s.IRCurrentBlock s.IRCurrentFunction
+        let f =
+            Llvm.saveBasicBlock s.IRCurrentBlock s.IRCurrentFunction
+
         EditingFunc
             { IRCurrentFunction = f
               ChakraCurrentModule = s.ChakraCurrentModule
@@ -292,9 +296,20 @@ let loadBlock label state =
             Some state
         else
             unloadCurrentBlock state
-            .<?>. (fun s ->
-                Llvm.findBasicBlock label s.IRCurrentFunction
-                )
+            .?>>. (fun state ->
+                match state with
+                | EditingFunc s ->
+                    Llvm.findBasicBlock label s.IRCurrentFunction
+                    .<?>. (fun b ->
+                        EditingBlock
+                            { IRCurrentFunction = s.IRCurrentFunction
+                              ChakraCurrentModule = s.ChakraCurrentModule
+                              IRCurrentModule = s.IRCurrentModule
+                              IRGenerics = s.IRGenerics
+                              Env = s.Env
+                              LastInstruction = s.LastInstruction
+                              IRCurrentBlock = b })
+                | _ -> None)
     | _ -> None
 
 
@@ -337,7 +352,8 @@ let addPrototypeInstance name mappings state =
 let addStringConstant str state =
     match state with
     | EditingBlock s ->
-        let (id, m) = Llvm.addStringConstant str s.IRCurrentModule
+        let (id, m) =
+            Llvm.addStringConstant str s.IRCurrentModule
 
         EditingBlock
             { s with
@@ -349,7 +365,8 @@ let addStringConstant str state =
 let addNumberConstant d state =
     match state with
     | EditingBlock s ->
-        let (id, m) = Llvm.addNumberConstant d s.IRCurrentModule
+        let (id, m) =
+            Llvm.addNumberConstant d s.IRCurrentModule
 
         EditingBlock
             { s with

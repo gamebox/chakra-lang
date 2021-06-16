@@ -81,7 +81,7 @@ let private addEdge from to' edge tg =
         { tg with
               UpRelations = Map.add from fromRelations tg.UpRelations
               DownRelations = Map.add to' toRelations tg.DownRelations
-              CurrentStrategy = 0}
+              CurrentStrategy = 0 }
     else
         tg
 
@@ -109,8 +109,7 @@ let addApplyeeEdge from to' tg =
     // printfn "Adding applyee edge from '%s' to '%s'" from to'
     addEdge from to' (Applyee) tg
 
-let addPatternEdge from to' tg =
-    addEdge from to' (PatternOf) tg
+let addPatternEdge from to' tg = addEdge from to' (PatternOf) tg
 
 let rec addAnnotation n ty tg =
     let withNewAnno =
@@ -125,7 +124,7 @@ let rec addAnnotation n ty tg =
         |> Option.bind
             (fun rels ->
                 let dependsOnParam (_, s) = (Map.find s withNewAnno.Nodes).IsParam
- 
+
                 List.tryFind dependsOnParam rels
                 |> Option.map
                     (fun (_, s) ->
@@ -136,8 +135,7 @@ let rec addAnnotation n ty tg =
     | None -> tg
 
 
-let hasNode node { Nodes = nodes } =
-    Map.containsKey node nodes
+let hasNode node { Nodes = nodes } = Map.containsKey node nodes
 
 let getNodeType node { Annotations = annos } = Map.tryFind node annos
 
@@ -162,7 +160,7 @@ let getDependents node { DownRelations = rels } =
     |> Option.map (fun deps -> List.map snd deps)
     |> Option.defaultWith (fun () -> [])
 
-let private getAllDependencies<'a> node (edgePredicate: (Relation * string) -> 'a list) { UpRelations = rels }  =
+let private getAllDependencies<'a> node (edgePredicate: (Relation * string) -> 'a list) { UpRelations = rels } =
     Map.tryFind node rels
     |> Option.map (fun deps -> List.collect edgePredicate deps)
     |> Option.defaultWith (fun () -> [])
@@ -260,87 +258,89 @@ let getParam node n tg =
 
 let attemptNextStrategy tg =
     printfn "Will attempt next strategy"
+
     List.tryItem (tg.CurrentStrategy + 1) tg.Strategies
-    |> Option.map (fun i -> { tg with CurrentStrategy = tg.CurrentStrategy + 1})
+    |> Option.map
+        (fun i ->
+            { tg with
+                  CurrentStrategy = tg.CurrentStrategy + 1 })
 
 let primaryTarget
     ({ Nodes = nodes
        UpRelations = uprels
        DownRelations = deprels
-       Annotations = annos }) =
-        Map.toSeq uprels
-        |> Seq.tryFind
-            (fun (k, rels) ->
-                let node = Map.find k nodes
-                let isParamNode = node.IsParam
-                let isAbstractNode = node.IsAbstract
+       Annotations = annos })
+    =
+    Map.toSeq uprels
+    |> Seq.tryFind
+        (fun (k, rels) ->
+            let node = Map.find k nodes
+            let isParamNode = node.IsParam
+            let isAbstractNode = node.IsAbstract
 
-                (List.filter (fun (rel, dep) -> (Map.containsKey dep annos)) rels)
-                    .Length
-                |> (=) rels.Length
-                |> (&&) (not isParamNode)
-                |> (&&) (not isAbstractNode)
-                |> (&&) (not (Map.containsKey k annos)))
-        |> Option.map fst
+            (List.filter (fun (rel, dep) -> (Map.containsKey dep annos)) rels)
+                .Length
+            |> (=) rels.Length
+            |> (&&) (not isParamNode)
+            |> (&&) (not isAbstractNode)
+            |> (&&) (not (Map.containsKey k annos)))
+    |> Option.map fst
 
 let applyWithApplyeeAnnotated tg =
-        let { Nodes = nodes
-              Annotations = annos } = tg
-        // printfn "Looking for an apply expr with its applyee annotated"
-        Map.toSeq nodes
-        |> Seq.tryFind
-            (fun (n, node) ->
-                match node with
-                | ExprNode (ChakraApplyExpr _) ->
+    let { Nodes = nodes; Annotations = annos } = tg
+    // printfn "Looking for an apply expr with its applyee annotated"
+    Map.toSeq nodes
+    |> Seq.tryFind
+        (fun (n, node) ->
+            match node with
+            | ExprNode (ChakraApplyExpr _) ->
 
-                    let applyeeIsAnnotated =
-                        getApplyee n tg
-                        |> Option.filter (fun applyee -> Map.containsKey applyee annos)
-                        |> Option.isSome
+                let applyeeIsAnnotated =
+                    getApplyee n tg
+                    |> Option.filter (fun applyee -> Map.containsKey applyee annos)
+                    |> Option.isSome
 
-                    (not (Map.containsKey n annos))
-                    && applyeeIsAnnotated
-                | _ -> false)
-        |> Option.map fst
+                (not (Map.containsKey n annos))
+                && applyeeIsAnnotated
+            | _ -> false)
+    |> Option.map fst
 
 let unannotatedParamDep
     { Nodes = nodes
       DownRelations = deprels
-      Annotations = annos } =
-        // printfn "Looking for unannotated parameter dependency"
-        Map.toSeq nodes
-        |> Seq.filter (fun (n, node) ->
-            node.IsParam && (not (Map.containsKey n annos)))
-        |> Seq.collect (fun (n, node) ->
+      Annotations = annos }
+    =
+    // printfn "Looking for unannotated parameter dependency"
+    Map.toSeq nodes
+    |> Seq.filter (fun (n, node) -> node.IsParam && (not (Map.containsKey n annos)))
+    |> Seq.collect
+        (fun (n, node) ->
             Map.tryFind n deprels
-            |> Option.map (fun rels ->
-                List.filter
-                    (fun (rel, s) ->
-                        match rel with
-                        | Parameter _ -> false
-                        | _ -> true)
-                    rels
-                |> List.toSeq)
+            |> Option.map
+                (fun rels ->
+                    List.filter
+                        (fun (rel, s) ->
+                            match rel with
+                            | Parameter _ -> false
+                            | _ -> true)
+                        rels
+                    |> List.toSeq)
             |> Option.defaultWith (fun () -> Seq.empty))
-        |> Seq.tryHead
-        |> Option.map snd
+    |> Seq.tryHead
+    |> Option.map snd
 
 /// Finds the next node that can be annotated following a progression of different strategies.
 let rec findAnnotationTarget tg =
-    // TODO: Add a AnnotationTargetStage field to TypeGraph.
-    //       Based on that stage choose the below target type to look for.
-    //       Then, add a `attemptNextTarget` function that moves to the next TargetStage
-    //       The user can then try to find a target again
-    //       This stage is reset to the first everytime we add an annotation.
     printfn "Attempting to find annotation target with strategy %i" tg.CurrentStrategy
+
     match (List.item tg.CurrentStrategy tg.Strategies) tg with
     | Some node -> Some node
     | None ->
         match attemptNextStrategy tg with
         | None -> None
         | Some tg' -> findAnnotationTarget tg'
-        
-    // |> Option.orElseWith unannotatedParamDep
+
+// |> Option.orElseWith unannotatedParamDep
 
 let findAnnotationLeaf
     { UpRelations = rels
@@ -350,7 +350,9 @@ let findAnnotationLeaf
         (fun k (v: (Relation * string) list) ->
             let annotated =
                 List.filter (fun (r, s) -> (Map.containsKey s annos)) v
-            annotated.Length = v.Length && (not (Map.containsKey k annos)))
+
+            annotated.Length = v.Length
+            && (not (Map.containsKey k annos)))
         rels
 
 let empty =
@@ -361,14 +363,13 @@ let empty =
       Types = Set.empty
       AnnotatedNodes = Map.empty
       CurrentStrategy = 0
-      Strategies = [
-          primaryTarget
-          applyWithApplyeeAnnotated
-          unannotatedParamDep
-          findAnnotationLeaf
-      ] }
+      Strategies =
+          [ primaryTarget
+            applyWithApplyeeAnnotated
+            unannotatedParamDep
+            findAnnotationLeaf ] }
 
-let equal tg1 tg2 = 
+let equal tg1 tg2 =
     tg1.Nodes = tg2.Nodes
     |> (&&) (tg1.UpRelations = tg2.UpRelations)
     |> (&&) (tg1.DownRelations = tg2.DownRelations)

@@ -1,0 +1,6 @@
+[book]
+authors = ["Anthony Bullard"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Chakra"
