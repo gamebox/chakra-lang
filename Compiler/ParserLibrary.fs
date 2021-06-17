@@ -257,6 +257,23 @@ let withPosition parser =
     { ParseFn = newInnerFn
       Label = parser.Label }
 
+
+let timed parser =
+    let newInnerFn input =
+        let timer = System.Diagnostics.Stopwatch.StartNew ()
+        printfn "[%i:%i] Trying to parse %s" input.Position.Line input.Position.Column parser.Label
+        match parser.ParseFn input with
+        | Success (_, i) as r ->
+            timer.Stop ()
+            printfn "[%i:%i-%i:%i] Parsed %s in %i ms" input.Position.Line input.Position.Column i.Position.Line i.Position.Column parser.Label timer.ElapsedMilliseconds
+            r
+        | Failure (_, _, pos) as r ->
+            timer.Stop ()
+            printfn "[%i:%i] Failed to parse %s after %i ms" input.Position.Line input.Position.Column parser.Label timer.ElapsedMilliseconds
+            r
+    
+    { ParseFn = newInnerFn ; Label = parser.Label }
+
 let withSpan parser =
     let newInnerFn input =
         match parser.ParseFn input with

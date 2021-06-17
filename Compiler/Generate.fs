@@ -56,7 +56,7 @@ let rec generateMatchBlocks expr clauses state =
     let findExactMatch matchee (TCMatchClause (p, _)) = matchee p
 
     match expr with
-    // Literal constants - there may be opporunities for dead code elimination here
+    // Literal constants - do these even make sense here?  Maybe only TCVar and TCApply do...
     | TCNumber d ->
         match List.tryFind
                   (findExactMatch
@@ -74,7 +74,7 @@ let rec generateMatchBlocks expr clauses state =
                   (findExactMatch
                       (fun p ->
                           match p with
-                          | TCPSymbol (_, sp) -> sp = s
+                          | TCPString (_, sp) -> sp = s
                           | _ -> false))
                   clauses with
         | Some (TCMatchClause (_, el)) ->

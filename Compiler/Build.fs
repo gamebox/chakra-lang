@@ -53,7 +53,7 @@ let printPhase phase timed =
     else
         printfn "%s" msg
 
-let printTime ms = printfn "...%sms" (CConsole.blue (sprintf "%d" ms))
+let printTime ms = printfn "...%s ms" (CConsole.blue (sprintf "%d" ms))
 
 let fileContents path =
     try
@@ -116,9 +116,16 @@ let parseProjectFiles (Project (name, root, v)) =
         .>>. (fun files ->
             (fileContents filePath)
             .>>. (fun file ->
+                printfn "Parsing %s" filePath
+                let timer = System.Diagnostics.Stopwatch.StartNew ()
                 (parseFile (chakraModule (modName filePath root)) file)
+                |> Result.map (fun e ->
+                    timer.Stop ()
+                    printfn "Parsing took %ims" timer.ElapsedMilliseconds
+                    e)
                 |> Result.mapError
                     (fun e ->
+                        timer.Stop ()
                         match e with
                         | BuildParseError (_, e') -> BuildParseError((modName filePath root), e')
                         | _ -> e))
@@ -173,6 +180,7 @@ let verifyProject
         let blah (acc: Result<Map<string, TCModule>, TypeError.TypeError>) (path, module') =
             match acc with
             | Ok envs ->
+                printfn "Annotating module %s\n---------------\n%O" path module'
                 Annotate.annotate path module' envs
                 |> Result.map (fun e -> Map.add path e envs)
             | _ ->

@@ -145,6 +145,8 @@ let questionMark =
     whitespace1 .>>. pchar '?' .>>. deadspace
     <?> "match separator"
 
+let questionMarkAlt =
+    pchar '?' .>>. whitespace1
 
 (* Literals *)
 
@@ -191,12 +193,11 @@ let pBaseIdentifier =
         firstSegment + segmentPart + signPart
 
 
-    segment <?> "identifier first segment"
+    segment
     .>>. many (dash .>>. segment)
-    <?> "identifier ongoing segments"
     .>>. opt questionOrBangOrStar
     |>> convertToIdentifier
-    <?> "identifier /([A-Za-z]+[a-z]*)(\-{1,2}[A-Za-z]+[a-z]*)*[?!\*]{0,1}/"
+    // <?> "identifier /([A-Za-z]+[a-z]*)(\-{1,2}[A-Za-z]+[a-z]*)*[?!\*]{0,1}/"
 
 let pVar =
     pBaseIdentifier
@@ -204,7 +205,7 @@ let pVar =
 
 let chakraVar =
     pVar |> withSpan |>> ChakraVar
-    <?> "valid identifier"
+    <?> "Var"
 
 let pSymbol = pchar '#' >>. pBaseIdentifier
 
@@ -310,7 +311,7 @@ let pValidChars =
     unescapedChar <|> escapedChar <|> unicodeChar
     <?> "valid string characters"
 
-let chakraNumber = pNumber |> withSpan |>> ChakraNumber
+let chakraNumber = pNumber |> withSpan |>> ChakraNumber <?> "number"
 
 let pCString =
     between pdoublequote (many pValidChars) pdoublequote
@@ -454,6 +455,7 @@ let chakraLambda =
     |> withSpan
     |>> createRecord
     |>> ChakraLambda
+    <?> "Lambda"
 
 (* Patterns *)
 
@@ -593,10 +595,11 @@ let chakraMatchClause =
     //
     // Lists like:
     // [ a _ c ...rest ] ; binding to some elements, ignoring others, collecting the tail
-    pipe >>. chakraPattern .>> arrow
+    pipe >>. (chakraPattern |> timed) .>> arrow
     .>>. chakraExprList
     |>> ChakraMatchClause
     <?> "match clause"
+    |> timed
 
 let chakraApplyExpr =
     chakraApply |> withSpan |>> ChakraApplyExpr
@@ -604,23 +607,29 @@ let chakraApplyExpr =
 
 let chakraMatch =
     let matchHeadExpr =
-        choice [ chakraVar
-                 chakraNumber
-                 chakraString
-                 chakraSymbol
-                 chakraTuple
-                 chakraList
-                 chakraStruct
-                 chakraMap
-                 chakraLambda
-                 chakraApplyExpr ]
+        choice [ chakraApplyExpr |> timed
+                 chakraVar |> timed ]
         <?> "Match head expression"
+        |> timed
 
     matchHeadExpr .>> questionMark
     .>>. sepBy1 chakraMatchClause deadspace
     |>> ChakraMatch
     <?> "match"
+    |> timed
 
+let chakraMatchAlt =
+    let matchHeadExpr =
+        choice [ chakraApplyExpr |> timed
+                 chakraVar |> timed ]
+        <?> "Match head expression"
+        |> timed
+
+    questionMarkAlt >>. matchHeadExpr .>> deadspace
+    .>>. sepBy1 chakraMatchClause deadspace
+    |>> ChakraMatch
+    <?> "match"
+    |> timed
 
 let pPipe = pchar '>'
 
@@ -674,7 +683,7 @@ let rec chakraBinding =
     <?> "Binding"
 
 let chakraMatchExpr =
-    chakraMatch |> withSpan |>> ChakraMatchExpr
+    chakraMatchAlt |> withSpan |>> ChakraMatchExpr
     <?> "match expression"
 
 let chakraPipeExpr =
@@ -782,15 +791,11 @@ let chakraModule modName =
     (opt docComment) .>>. chakraModuleDef
     <?> "Module definition"
     .>> deadspace
-    <?> "significant newlines"
     .>>. possibleImportSection
     <?> "import section"
     .>> opt deadspace
-    <?> "significant newline"
     .>>. topLevelBindings
-    <?> "module bindings"
     .>> deadspace
-    <?> "significant newline"
     |>> buildModule
     <?> "module"
 
@@ -824,36 +829,34 @@ let chakraMetdata =
 (* Set refs *)
 
 chakraPatternRef
-:= choice [ cpVar
-            cpNumber
+:= choice [ cpNumber
             cpString
             cpSymbol
             cpTuple
             cpList
             cpStruct
             cpMap
-            cpIgnore ]
+            cpIgnore
+            cpVar ]
    <?> "pattern"
-
 chakraExprRef
-:= choice [ chakraPipeExpr
-            chakraMatchExpr
-            chakraApplyExpr
-            chakraVar
-            chakraNumber
+:= choice [ chakraNumber
             chakraString
             chakraSymbol
             chakraTuple
             chakraList
             chakraStruct
             chakraMap
-            chakraLambda ]
+            chakraLambda
+            chakraPipeExpr
+            chakraMatchExpr
+            chakraApplyExpr
+            chakraVar |> timed ]
    <?> "expression"
 
 chakraExprListRef
 := many (chakraBinding .>> deadspace)
-   <?> "expression list bindings"
    .>>. chakraExpr
-   <?> "expression list expression"
    |>> ChakraExprList
    <?> "expression list"
+   |> timed
