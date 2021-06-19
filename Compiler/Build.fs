@@ -2,8 +2,7 @@ module Build
 
 open System.IO
 open System.Text.RegularExpressions
-open ParserLibrary
-open ChakraParser
+open ChakraFparsec
 open AST
 open Pretty
 open TypedAST
@@ -37,7 +36,7 @@ type WrittenProject = WrittenProject of proj: Project * llvmPath: string
 type BuildError =
     | BuildIOError of string
     | BuildConfigNoNameError
-    | BuildParseError of string * (ParserLabel * ParserError * ParserPosition)
+    | BuildParseError of string * (ParserLibrary.ParserLabel * ParserLibrary.ParserError * ParserLibrary.ParserPosition)
     | BuildImportError
     | BuildTypeError of TypeError.TypeError list
     | BuildIRError
@@ -61,11 +60,16 @@ let fileContents path =
         |> Result.map (String.concat "\n")
     with _ -> Error(BuildIOError path)
 
+let toResult = function
+| FParsec.CharParsers.Success (res, _, _) ->
+    Ok res
+| FParsec.CharParsers.Failure (e, err, state) ->
+    let msgs = ""
+    Error (BuildParseError("", (e, msgs, { Line = err.Position.Line |> int; Column = err.Position.Column |> int; CurrentLine = "" })))
+
 let parseFile fileParser file =
-    run fileParser file
+    FParsec.CharParsers.run fileParser file
     |> toResult
-    |> Result.map fst
-    |> Result.mapError (fun e -> BuildParseError("", e))
 
 let metadataPath projectPath =
     Path.Combine [| projectPath
@@ -247,4 +251,9 @@ let build optPath =
 
     match buildResult with
     | Ok () -> printPhase "DONE" false
-    | Error err -> printfn "Build Error: %O" err
+    | Error err ->
+        match err with
+        | BuildParseError (_, (e, _, _)) ->
+            printfn "Parse error:\n%s" (CConsole.red e)
+        | _ ->
+            printfn "Build Error: %O" err

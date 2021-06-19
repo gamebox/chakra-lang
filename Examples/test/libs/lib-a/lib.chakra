@@ -5,8 +5,9 @@
 %( io, string ) = /stdlib
 
 init(caps) =
-    ? caps
-    | _ ->
+    num = 1
+    num ?
+    | 1 ->
         print(stdio, to-upper("hello world!"))
     | _ ->
         io.print(caps.stdio, string.to-upper("should never happen..."))
@@ -30,7 +31,7 @@ function(a) = add(number, a)
 tuple = (number, string)
 
 struct = %(
-    my-number = 3,
+    my-number = 3
 )
 
 list = [number, 2, 3]
@@ -58,18 +59,18 @@ complex(fn) =
     (some-num, some-string)
 
 more-match(a) =
-    ? a
+    a ?
     | "Hi" -> 1
     | "There" -> 2
     | "Something" -> 3
     | _ -> labmda(4)
 
 ; Uncomment when we add support for spread and struct field access
-; zump(struct) =
-;     %(
-;         num = function(struct),
-;         ...struct,
-;     )
+zump(struct) =
+    %(
+        num = function(struct),
+        ...struct
+    )
 
 ; print(type) =
 ;     type ?
@@ -144,3 +145,5 @@ more-match(a) =
 ;     | #polymorphic-type(t) -> format("@%s", t)
 
 ;     | #ref-type(t) -> format("&%s", print(t))
+
+a = 1
