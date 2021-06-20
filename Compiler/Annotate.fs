@@ -12,11 +12,17 @@ let generics =
     "abcdefghijklmnopqrstuvwxyz".ToCharArray()
 
 let inspect (label: string) (tg: TypeGraph.TypeGraph) =
-    let path = sprintf "/home/anthony/.%s.md" label
+    let path =
+        try
+            System.Environment.GetEnvironmentVariable("CHAKRA_ANNOTATE_INSPECT_PATH")
+        with :? System.ArgumentNullException -> ""
 
-    let diagram = TypeGraph.toMermaid tg true
-    System.IO.File.WriteAllText(path, diagram)
-    tg
+    if path = null || path = "" then
+        tg
+    else
+        let diagram = TypeGraph.toMermaid tg true
+        System.IO.File.WriteAllText(path, diagram)
+        tg
 
 let joinIds id ext =
     match id with
@@ -616,7 +622,7 @@ let walkAndAnnotate tg =
     let rec walk graph =
         match TypeGraph.findAnnotationTarget graph with
         | Some node ->
-            printfn "Trying to annotate %s" node
+            // printfn "Trying to annotate %s" node
 
             let graph' =
                 TypeGraph.getBindingNode node graph

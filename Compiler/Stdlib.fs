@@ -8,7 +8,8 @@ let stdlibMath =
     stdlibModule [ ("pow", fn [ "a", num; "b", num ] num)
                    ("floor", fn [ "a", num ] num)
                    ("ceil", fn [ "a", num ] num)
-                   ("round", fn [ "a", num ] num) ]
+                   ("round", fn [ "a", num ] num)
+                   ("add", fn [ "a", num; "b", num ] num) ]
 
 let stdlibString =
     stdlibModule [ ("to-upper", fn [ "string", str ] str)
@@ -64,6 +65,9 @@ let stdlibIo =
                           "str", str ]
                         (cmd)) ]
 
+let stdlibFormat =
+    stdlibModule [ ("number", fn [ "num", num ] str) ]
+
 let initFuncTy =
     fn [ "init", gen "init" ] (tup [ gen "state"; cmd ])
 
@@ -105,4 +109,5 @@ let stdlibExports =
       ("map", stdlibMap)
       ("list", stdlibList)
       ("io", stdlibIo)
-      ("actors", stdlibActors) ]
+      ("actors", stdlibActors)
+      ("format", stdlibFormat) ]

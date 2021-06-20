@@ -2,15 +2,11 @@
     init
 )
 
-%( io, string ) = /stdlib
+%( io, string, math, format ) = /stdlib
 
 init(caps) =
-    num = 1
-    num ?
-    | 1 ->
-        print(stdio, to-upper("hello world!"))
-    | _ ->
-        io.print(caps.stdio, string.to-upper("should never happen..."))
+    io.print(caps.stdio, format.number(math.add(1, 2)))
+
 
 ; = %(
 ;     number,
@@ -22,55 +18,55 @@ init(caps) =
 ;     add,
 ; ) = /stdlib
 
-number = 1
+; number = 1
 
-string = "Some string"
+; string = "Some string"
 
-function(a) = add(number, a)
+; function(a) = add(number, a)
 
-tuple = (number, string)
+; tuple = (number, string)
 
-struct = %(
-    my-number = 3
-)
+; struct = %(
+;     my-number = 3
+; )
 
-list = [number, 2, 3]
+; list = [number, 2, 3]
 
-map = %[
-    number = string,
-    2 = "Another string"
-]
+; map = %[
+;     number = string,
+;     2 = "Another string"
+; ]
 
-lambda =
-    { (a) ->
-        add(number, a) }
+; lambda =
+;     { (a) ->
+;         add(number, a) }
 
-using-function = function(3)
+; using-function = function(3)
 
-make(name, age) =
-    %(
-        name,
-        age
-    )
+; make(name, age) =
+;     %(
+;         name,
+;         age
+;     )
 
-complex(fn) =
-    some-num = 42
-    some-string = fn("Hello")
-    (some-num, some-string)
+; complex(fn) =
+;     some-num = 42
+;     some-string = fn("Hello")
+;     (some-num, some-string)
 
-more-match(a) =
-    a ?
-    | "Hi" -> 1
-    | "There" -> 2
-    | "Something" -> 3
-    | _ -> labmda(4)
+; more-match(a) =
+;     a ?
+;     | "Hi" -> 1
+;     | "There" -> 2
+;     | "Something" -> 3
+;     | _ -> labmda(4)
 
 ; Uncomment when we add support for spread and struct field access
-zump(struct) =
-    %(
-        num = function(struct),
-        ...struct
-    )
+; zump(struct) =
+;     %(
+;         num = function(struct),
+;         ...struct
+;     )
 
 ; print(type) =
 ;     type ?
@@ -146,4 +142,3 @@ zump(struct) =
 
 ;     | #ref-type(t) -> format("&%s", print(t))
 
-a = 1

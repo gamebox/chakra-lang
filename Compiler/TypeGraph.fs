@@ -257,7 +257,7 @@ let getParam node n tg =
         tg
 
 let attemptNextStrategy tg =
-    printfn "Will attempt next strategy"
+    // printfn "Will attempt next strategy"
 
     List.tryItem (tg.CurrentStrategy + 1) tg.Strategies
     |> Option.map
@@ -331,7 +331,7 @@ let unannotatedParamDep
 
 /// Finds the next node that can be annotated following a progression of different strategies.
 let rec findAnnotationTarget tg =
-    printfn "Attempting to find annotation target with strategy %i" tg.CurrentStrategy
+    // printfn "Attempting to find annotation target with strategy %i" tg.CurrentStrategy
 
     match (List.item tg.CurrentStrategy tg.Strategies) tg with
     | Some node -> Some node

@@ -23,10 +23,10 @@ let genMake initTy stateTy msgTy state = state
 let inspect label s =
     match s with
     | Some x ->
-        //printfn "%s" label
+        printfn "%s" label
         s
     | None ->
-        //printfn "FAILED: %s" label
+        printfn "FAILED: %s" label
         s
 
 let generateStructAccess root path ty state =
@@ -68,7 +68,7 @@ let rec generateMatchBlocks expr clauses state =
         | Some (TCMatchClause (_, el)) ->
             // Inline expression list of this clause, and eliminate other clauses completely
             generateExprList el state
-        | None -> raise (System.Exception())
+        | None -> raise (System.Exception "This is weird")
     | TCString s ->
         match List.tryFind
                   (findExactMatch
@@ -142,7 +142,7 @@ and generateExpr (expr: TypedAST.TCExpr) (state: IRState.IRState) =
                         let blah s =
                             IRState.lastInstruction s
                             .<?>. (fun i ->
-                                printfn "Id for arg %i is %O" idx i
+                                // printfn "Id for arg %i is %O" idx i
                                 ((i, arg.Typ) :: args', Some s))
                             |> Option.defaultValue ([], None)
 
@@ -154,7 +154,7 @@ and generateExpr (expr: TypedAST.TCExpr) (state: IRState.IRState) =
                     ([], Some state)
                     (List.mapi (.<.>.) args)
 
-            printfn "Applying %s" (root :: path |> String.concat ".")
+            // printfn "Applying %s" (root :: path |> String.concat ".")
 
             state'
             .?>>. generateStructAccess root path ty
