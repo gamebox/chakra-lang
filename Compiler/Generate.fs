@@ -21,13 +21,13 @@ let promoteVoidPtrToChakraType ty fromReg state =
 let genMake initTy stateTy msgTy state = state
 
 let inspect label s =
-    match s with
-    | Some x ->
-        printfn "%s" label
-        s
-    | None ->
-        printfn "FAILED: %s" label
-        s
+    // match s with
+    // | Some x ->
+    //     printfn "%s" label
+    //     s
+    // | None ->
+    //     printfn "FAILED: %s" label
+    s
 
 let generateStructAccess root path ty state =
     IRState.findIdentifierForVar root state

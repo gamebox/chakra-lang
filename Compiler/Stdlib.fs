@@ -5,10 +5,10 @@ open TypeSystem
 let stdlibModule fields = strct (fields, false, None)
 
 let stdlibMath =
-    stdlibModule [ ("pow", fn [ "a", num; "b", num ] num)
+    stdlibModule [ (* ("pow", fn [ "a", num; "b", num ] num)
                    ("floor", fn [ "a", num ] num)
                    ("ceil", fn [ "a", num ] num)
-                   ("round", fn [ "a", num ] num)
+                   ("round", fn [ "a", num ] num) *)
                    ("add", fn [ "a", num; "b", num ] num) ]
 
 let stdlibString =

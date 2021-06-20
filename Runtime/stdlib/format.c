@@ -6,9 +6,9 @@
 #include "../stdlib.h"
 
 char *Chakra_stdlib__format__number(double num) {
-  int length = snprintf(NULL, 0, "%d", num);
+  int length = snprintf(NULL, 0, "%f", num);
   char *str = (char *)malloc(length + 1);
-  snprintf(str, length, "%d", num);
+  snprintf(str, length, "%f", num);
   return str;
 }
 

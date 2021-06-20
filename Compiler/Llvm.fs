@@ -4,6 +4,7 @@ module Llvm
 type Identifier =
     | GlobalId of string
     | LocalReg of int
+    | NumberLiteral of System.Decimal
 
 type Index =
     | PtrIndex of int
@@ -74,12 +75,9 @@ let addStringConstant s (m: Module) =
            Constants = StringConstant s :: m.Constants })
 
 let addNumberConstant d (m: Module) =
-    let n = m.Constants.Length
-    let id = sprintf ".const.%i" n |> GlobalId
+    let id = NumberLiteral d
 
-    (id,
-     { m with
-           Constants = NumberConstant d :: m.Constants })
+    (id, m)
 
 let addBasicBlock block (f: Func) =
     { f with
@@ -184,12 +182,13 @@ let printConstant (i: int) (c: Const) =
     match c with
     | StringConstant s ->
         sprintf "@.const.%i = private unnamed_addr constant [%i x i8] c\"%s\\00\", align 1" i (s.Length + 1) s
-    | NumberConstant d -> sprintf "@.const.%i = private unnamed_addr constant double %s" i (d.ToString())
+    | NumberConstant d -> sprintf "@.const.%i = private unnamed_addr constant double %f" i (System.Decimal.ToDouble d)
 
 let printId id =
     match id with
     | GlobalId s -> sprintf "@%s" s
     | LocalReg n -> sprintf "%%%i" n
+    | NumberLiteral d -> sprintf "%f" (System.Decimal.ToDouble d)
 
 let printTerminal (t: TerminalInstructionType) =
     match t with
@@ -215,6 +214,7 @@ let printCallArg constants (id, ty) =
             sprintf "%s %s" (printChakraType ty) gep
         | NumberConstant d -> sprintf "double %s" (printId id)
     | LocalReg n -> sprintf "%s %s" (printChakraType ty) (printId id)
+    | NumberLiteral d -> sprintf "double %f" (System.Decimal.ToDouble d)
 
 let printInstruction constants (i: Instruction) =
     match i.Instruction with

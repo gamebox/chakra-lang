@@ -58,9 +58,10 @@ let empty triple datalayout =
         { IRCurrentModule = Llvm.init triple datalayout
           IRGenerics = Map.empty
           Env =
-              Env.empty ()
-              |> Env.add ("io", (Llvm.globalId "Chakra_stdlib__io", Stdlib.stdlibIo))
-              |> Env.add ("string", (Llvm.globalId "Chakra_stdlib__string", Stdlib.stdlibString)) }
+              List.fold
+                  (fun e (id, ty) -> Env.add (id, (Llvm.globalId (sprintf "Chakra_stdlib__%s" id), ty)) e)
+                  (Env.empty ())
+                  Stdlib.stdlibExports }
 
 
 

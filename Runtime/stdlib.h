@@ -43,7 +43,7 @@ envelope_t *Chakra_stdlib__timeout(int ms_timeout, void *msg);
 actor_id_t Chakra_stdlib__self();
 char *Chakra_stdlib__string__to_upper(char *str);
 
-char *Chakra_stdlib__format__number(double num);
+static inline char *Chakra_stdlib__format__number(double num);
 
 double Chakra_stdlib__math__add(double left, double right);
 
