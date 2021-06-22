@@ -250,18 +250,19 @@ let linkAndCompile (WrittenProject (Project (name, root, v), llvmPath)) =
     let output = sprintf "%s/.build/%s" root name
 
     let args =
-        sprintf "%s %s -lpthread" inputs llvmPath
+        sprintf "%s %s -lpthread -lm" inputs llvmPath
 
-    let (time, _, errs) = RunProcess.runProc "clang" args
+    let (time, outputs, errs) = RunProcess.runProc "clang" args
 
     match Seq.toList errs with
     | [] ->
         System.IO.File.Delete(output)
         System.IO.File.Move("./a.out", output)
+        printfn "%s" (String.concat "\n" outputs)
 
         printfn "Wrote executable '%s' in %ims " output (time)
         |> Ok
-    | _ -> Error(BuildIOError(sprintf "Fai,led to write '%s' after %ims:\n\n%s" output time (String.concat "\n" errs)))
+    | _ -> Error(BuildIOError(sprintf "Failed to write '%s' after %ims:\n\n%s" output time (String.concat "\n" errs)))
 
 let build optPath =
     let buildResult =

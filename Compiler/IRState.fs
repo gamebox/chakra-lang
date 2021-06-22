@@ -59,7 +59,9 @@ let empty triple datalayout =
           IRGenerics = Map.empty
           Env =
               List.fold
-                  (fun e (id, ty) -> Env.add (id, (Llvm.globalId (sprintf "Chakra_stdlib__%s" id), ty)) e)
+                  (fun e (id, ty) ->
+                    printfn "Loading stdlib module %s as %O" id ty
+                    Env.add (id, (Llvm.globalId (sprintf "Chakra_stdlib__%s" id), ty)) e)
                   (Env.empty ())
                   Stdlib.stdlibExports }
 
@@ -375,6 +377,12 @@ let addNumberConstant d state =
                   LastInstruction = id }
         |> Some
     | _ -> None
+
+let loadIdentifier id state =
+    match state with
+    | EditingBlock s -> Some (EditingBlock { s with LastInstruction = id })
+    | _ -> None
+    
 
 let addGepInstruction baseId baseTy path state =
     match state with

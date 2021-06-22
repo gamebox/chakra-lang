@@ -5,7 +5,13 @@
 %( io, string, math, format ) = /stdlib
 
 init(caps) =
-    io.print(caps.stdio, format.number(math.add(1, 2)))
+    formatted =
+        one = 1
+        two = 2
+        added = math.add(one, two)
+        format.integer(added)
+
+    io.print(caps.stdio, formatted)
 
 
 ; = %(

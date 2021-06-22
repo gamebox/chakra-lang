@@ -152,8 +152,8 @@ let stdlib = """
 @Capabilities = global %struct.Capabilities { i64 0 }
 @Chakra_stdlib__io = external global { %struct.Envelope* (i64, i8*)* }
 @Chakra_stdlib__string = external global { i8* (i8*)* }
-@Chakra_stdlib__format = external global { i8* (double)* }
-@Chakra_stdlib__math = external global { double (double, double)* }
+@Chakra_stdlib__format = external global { i8* (double)*, i8* (double)* }
+@Chakra_stdlib__math = external global { double (double, double)*, double (double, double)*, double (double, double)*, double (double, double)*, double (double, double)*, double (double)*, double (double)*, double (double)* }
 @MainActor = global %struct.MainActor { %struct.Envelope* ({i64}*)* @init }
 
 """

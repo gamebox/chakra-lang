@@ -10,7 +10,8 @@
 		"stdlib.h": "c",
 		"channel.h": "c",
 		"sched.h": "c",
-		"actors.h": "c"
+		"actors.h": "c",
+		"math.h": "c"
 	}
 }
 }

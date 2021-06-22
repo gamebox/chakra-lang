@@ -21,7 +21,7 @@ let runProc filename args =
     let outputHandler f (_sender: obj) (args: DataReceivedEventArgs) = f args.Data
 
     let p = new Process(StartInfo = procStartInfo)
-    // p.OutputDataReceived.AddHandler(DataReceivedEventHandler (outputHandler outputs.Add))
+    p.OutputDataReceived.AddHandler(DataReceivedEventHandler (outputHandler outputs.Add))
     p.ErrorDataReceived.AddHandler(DataReceivedEventHandler(outputHandler errors.Add))
 
     let started =
@@ -35,7 +35,7 @@ let runProc filename args =
     if not started then
         failwithf "Failed to start process %s" filename
 
-    printfn "Started %s with pid %i" p.ProcessName p.Id
+    // printfn "Started %s with pid %i" p.ProcessName p.Id
     p.BeginOutputReadLine()
     p.BeginErrorReadLine()
     p.WaitForExit()

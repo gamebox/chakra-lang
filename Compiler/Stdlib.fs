@@ -2,14 +2,17 @@ module Stdlib
 
 open TypeSystem
 
-let stdlibModule fields = strct (fields, false, None)
+let stdlibModule fields = StructType (fields, false, None)
 
 let stdlibMath =
-    stdlibModule [ (* ("pow", fn [ "a", num; "b", num ] num)
-                   ("floor", fn [ "a", num ] num)
-                   ("ceil", fn [ "a", num ] num)
-                   ("round", fn [ "a", num ] num) *)
-                   ("add", fn [ "a", num; "b", num ] num) ]
+    stdlibModule [ ("add", fn [ "a", num; "b", num ] num)
+                   ("sub", fn ["left", num; "right", num] num);
+                   ("mul", fn ["left", num; "right", num] num);
+                   ("div", fn ["left", num; "right", num] num);
+                   ("pow", fn ["left", num; "exponent", num] num);
+                   ("floor", fn ["num", num] num);
+                   ("ceil", fn ["num", num] num);
+                   ("round", fn ["num", num] num)]
 
 let stdlibString =
     stdlibModule [ ("to-upper", fn [ "string", str ] str)
@@ -66,7 +69,8 @@ let stdlibIo =
                         (cmd)) ]
 
 let stdlibFormat =
-    stdlibModule [ ("number", fn [ "num", num ] str) ]
+    stdlibModule [ ("number", fn [ "num", num ] str)
+                   ("integer", fn [ "num", num ] str)]
 
 let initFuncTy =
     fn [ "init", gen "init" ] (tup [ gen "state"; cmd ])

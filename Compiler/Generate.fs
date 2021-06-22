@@ -34,6 +34,7 @@ let generateStructAccess root path ty state =
     |> inspect (sprintf "finding identifer for var %s" root)
     .?>>. (fun (id, ty') ->
         let (TypeSystem.StructType (fs, _, _)) = ty'
+        printfn "FIELDS out here: %O" fs
 
         let (idxs, _) =
             List.fold
@@ -42,7 +43,8 @@ let generateStructAccess root path ty state =
                         List.findIndex (fun (k, t) -> k = segment) fields
 
                     let (_, ty) = List.item idx fields
-
+                    printfn "FIELDS: %O" fields
+                    printfn "SEGMENT: %s, INDEX: %i, TYPE: %O" segment idx ty
                     match ty with
                     | TypeSystem.StructType (fs, _, _) -> (idx :: is, fs)
                     | _ -> (List.rev (idx :: is), [ (segment, ty) ]))
@@ -113,6 +115,9 @@ and generateExprList (TCExprList (bs, e)) state =
 
 and generateExpr (expr: TypedAST.TCExpr) (state: IRState.IRState) =
     match expr with
+    | TCVar ((root, Some []), ty) ->
+        IRState.findIdentifierForVar root state
+        .?>>. (fun (id, ty) -> IRState.loadIdentifier id state)
     | TCVar ((root, Some path), ty) ->
         // Find the register for the root
         // get the type of the root
