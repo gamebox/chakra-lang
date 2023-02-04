@@ -1,0 +1,11 @@
+;; This is some comments
+;; They should be doc comments
+;; Yay!
+= %( foo, bar )
+
+%( a, b ) = /awesome-package
+
+
+;; Something
+foo = 22.000000
+bar = \"Hello world!\"

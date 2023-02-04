@@ -28,9 +28,7 @@ let main argv =
         | Command.Version ->
             printfn "%s" versionInfo
         | Command.Build optPath ->
-            //Blah.test ChakraParser.chakraBinding
             build optPath
-            //printfn "Build not yet implemented"
         | Command.Format str ->
             Pretty.format str
         

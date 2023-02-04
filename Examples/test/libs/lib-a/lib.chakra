@@ -1,8 +1,57 @@
 = %(
-    init
+    main,
 )
 
-%( io, string, math, format ) = /stdlib
+%(
+    io,
+    add,
+    list,
+    math,
+    format,
+    ; Task
+) = /stdlib
+
+; Example Type Definition. Stdlib definition of the Actor type
+Actor(state, msg) =
+    | Actor({ (Capabilities) -> Cmd }, { (state, msg) -> (state, Cmd) })
+    | Task({ (Capabilities) -> Cmd })
+
+; Example Type Alias.  A piece of the Stdlib definition of Capabilities and Capability Types
+StdioCapability = StdioCapability
+
+Capabilities = %(
+    stdio = StdioCapability,
+)
+
+TypedFieldList = List(( "", Type ))
+TypeConstructor = %( name = "", args = TypedFieldList )
+Type =
+    | StringType
+    | NumberType
+    | TupleType(List(Type))
+    | ListType(Type)
+    | MapType(Type, Type)
+    | StructType(TypedFieldList, Bool)
+    | FunctionType(TypedFieldList, Type)
+    | GenericType("") ; A type variable
+    | CustomType("", TypedFieldList)
+    | TypeAlias("", Type)
+
+; Person :: %( name: String, age: Num )
+Person = %( name = "", age = # )
+
+; How main can be defined using a Type Constructor
+main = Task(init)
+
+; This is the typed syntax.  Only functions are typed
+init(caps: Capabilities): Cmd =
+    io.print(caps.stdio, 1)
+
+;  This just prints a number
+;; (Capabilities) -> Cmd
+init(caps) =
+    io.print(caps.stdio, 1)
+
 
 init(caps) =
     formatted =
@@ -11,8 +60,8 @@ init(caps) =
         added = math.add(one, two)
         format.integer(added)
 
-    io.print(caps.stdio, formatted)
-
+    ; io.print :: { (cap: StdioCapability, text: String) -> Command }
+    io.print(caps.stdio, 1);
 
 ; = %(
 ;     number,
@@ -24,127 +73,106 @@ init(caps) =
 ;     add,
 ; ) = /stdlib
 
-; number = 1
+number = 1
 
-; string = "Some string"
+string = "Some string"
 
-; function(a) = add(number, a)
+; Another example of annotating a function head
+; function(a: Num): Num = add(number, a)
 
-; tuple = (number, string)
+tuple = (number, string)
 
-; struct = %(
-;     my-number = 3
-; )
+struct = %(
+    my-number = 3
+)
 
-; list = [number, 2, 3]
+list = [number, 2, 3]
 
-; map = %[
-;     number = string,
-;     2 = "Another string"
-; ]
+map = %[
+    number = string,
+    2 = "Another string"
+]
 
-; lambda =
-;     { (a) ->
-;         add(number, a) }
+lambda =
+    { (a) ->
+        add(number, a) }
 
-; using-function = function(3)
+function(x: #): # = add(x, 1)
 
-; make(name, age) =
-;     %(
-;         name,
-;         age
-;     )
+; using-funcion :: Num
+using-function = function(3)
 
-; complex(fn) =
-;     some-num = 42
-;     some-string = fn("Hello")
-;     (some-num, some-string)
+; make :: { (name: String, age: Num) -> Person }
+make(name: "", age: #): Person =
+    %(
+        name,
+        age
+    )
 
-; more-match(a) =
-;     a ?
-;     | "Hi" -> 1
-;     | "There" -> 2
-;     | "Something" -> 3
-;     | _ -> labmda(4)
+complex(fn: { ("") -> "" }): (#, "") =
+    some-num = 42
+    some-string = fn("Hello")
+    (some-num, some-string)
 
-; Uncomment when we add support for spread and struct field access
-; zump(struct) =
-;     %(
-;         num = function(struct),
-;         ...struct
-;     )
+more-match(a: ""): # =
+    a ?
+    | "Hi" -> 1
+    | "There" -> 2
+    | "Something" -> 3
+    | _ -> labmda(4)
 
-; print(type) =
-;     type ?
-;     | #union-type(types) ->
-;         types
-;         > map(print)
-;         > concat(" | ")
-;         > format("< %s >") ; This is not a planned feature
-;         ; Would desugar to
-;         ; format("< %s >", concat(" | ", map(print, types)))
+; What the hell?
+spread(struct: %( num = #, other = "" )): %( num = #, other = "" ) =
+    %(
+        num = function(struct),
+        ...struct
+    )
 
-;     | #sum-type(types) ->
-;         types
-;         > map(print)
-;         > concat(" + ")
-;         > format("< %s >") ; This is not a planned feature
+print-typed-field-list(field-list: TypedFieldList, assigment-op: String): String =
+    field-list
+    > map({ (name, type) -> concat([ name, assignment-op, print(type) ], " ")})
+    > concat(", ")
 
-;     | #string-type -> "str"
+print(type: Type): "" =
+    type ?
+    | StringType -> "str"
 
-;     | #number-type -> "num"
+    | NumberType -> "num"
 
-;     | #symbol-type(info) ->
-;         info ?
-;         | #global-symbol(s) -> format("#%s", s)
-;         | #module-symbol(m, s) -> format("#%s/%s", m, s)
+    | TupleType(types) ->
+        items =
+            types
+            > map(print)
+            > concat(", ")
+        
+        concat([ "( ", items, " )" ], "")
 
-;     | #literal-type(literal) -> pretty(80, showLiteral literal)
+    | ListType(generic-type) ->
+        concat([ "[ ", print(generic-type), " ]" ], "")
 
-;     | #tuple-type(type) ->
-;         map(print, types)
-;         > concat(", ")
-;         > format(" %s ")
+    | MapType(key-type, value-type) ->
+        concat([ "%[ ", print(key-type), " = ", print(value-type), " ]" ], "")
 
-;     | #list-type(generic-type) ->
-;         print(generic-type)
-;         > format("[ %s ]")
+    | StructType(fields, is-open) ->
+        open-sigil =
+            is-open ?
+            | True -> "..."
+            | False -> ""
 
-;     | #map-type(key-type, value-type) ->
-;         format("%%[ %s = %s ]", print(key-type), print(value-type))
+        pairs = print-typed-field-list(fields, "=")
 
-;     | #struct-type(fields, is-open, tag) ->
-;         open-sigil =
-;             is-open ?
-;             | #true -> "..."
-;             | #false -> ""
+        format("%%( %s %s)", [ pairs, open-sigil ])
 
-;         pairs =
-;             fields
-;             > map({ (name, type) -> format(".%s = %s", name, print(type))})
-;             > concat(", ")
+    | FunctionType(args, return) ->
+        arg-list =
+            args
+            > map(compose(snd, print))
+            > concat(", ")
 
-;         format("%%( %s %s)", pairs, open-sigil)
+        format("{ %s -> %s }", [ arg-list, print(return) ])
 
-;     | #function-type(args, return) ->
-;         arg-list =
-;             args
-;             > map(compose(snd, print))
-;             > concat(", ")
+    | GenericType(type) -> format("?%s", [ type ])
 
-;         format("{ %s -> %s }", arg-list, print(return))
-
-;     | #generic-type(type) -> format("?%s", type)
-
-;     | #capability-type(cap) ->
-;         cap ?
-;         | #stdio-capability -> "$stdio"
-;         | #file-read-capability -> "$fread"
-;         | #file-write-capability -> "#fwrite"
-
-;     | #command-type -> "!"
-
-;     | #polymorphic-type(t) -> format("@%s", t)
-
-;     | #ref-type(t) -> format("&%s", print(t))
-
+    | CustomType(name, variables, _) ->
+        vars = print-typed-field-list(variables, ":")
+        concat([ name, "( ", vars, ")" ], "")

@@ -8,14 +8,12 @@ let demoteChakraTypeToVoidPtr ty fromReg state =
     match ty with
     | NumberType -> state
     | StringType -> state
-    | SymbolType _ -> state
     | _ -> state
 
 let promoteVoidPtrToChakraType ty fromReg state =
     match ty with
     | NumberType -> state
     | StringType -> state
-    | SymbolType _ -> state
     | _ -> state
 
 let genMake initTy stateTy msgTy state = state
@@ -33,7 +31,7 @@ let generateStructAccess root path ty state =
     IRState.findIdentifierForVar root state
     |> inspect (sprintf "finding identifer for var %s" root)
     .?>>. (fun (id, ty') ->
-        let (TypeSystem.StructType (fs, _, _)) = ty'
+        let (TypeSystem.StructType (fs, _)) = ty'
         printfn "FIELDS out here: %O" fs
 
         let (idxs, _) =
@@ -46,7 +44,7 @@ let generateStructAccess root path ty state =
                     printfn "FIELDS: %O" fields
                     printfn "SEGMENT: %s, INDEX: %i, TYPE: %O" segment idx ty
                     match ty with
-                    | TypeSystem.StructType (fs, _, _) -> (idx :: is, fs)
+                    | TypeSystem.StructType (fs, _) -> (idx :: is, fs)
                     | _ -> (List.rev (idx :: is), [ (segment, ty) ]))
                 ([], fs)
                 path
@@ -77,18 +75,6 @@ let rec generateMatchBlocks expr clauses state =
                       (fun p ->
                           match p with
                           | TCPString (_, sp) -> sp = s
-                          | _ -> false))
-                  clauses with
-        | Some (TCMatchClause (_, el)) ->
-            // Inline expression list of this clause, and eliminate other clauses completely
-            generateExprList el state
-        | None -> raise (System.Exception())
-    | TCSymbol s ->
-        match List.tryFind
-                  (findExactMatch
-                      (fun p ->
-                          match p with
-                          | TCPSymbol (_, sp) -> sp = s
                           | _ -> false))
                   clauses with
         | Some (TCMatchClause (_, el)) ->

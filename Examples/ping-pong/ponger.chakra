@@ -1,0 +1,18 @@
+= %(
+    ponger,
+)
+
+%( Ref, Cmd, Actor, send ) = /stdlib
+
+type Msg =
+    | Ping
+
+type State = %( pinger = Ref(Pong) )
+
+ponger = Actor(init, receive)
+
+init(pinger: Ref(Ping)): (State, Cmd) =
+    ( %( pinger ), cmd.none )
+
+receive(msg: Msg, state: State): (State, Cmd) =
+    ( state, send(state.pinger, Pong) )

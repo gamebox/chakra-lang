@@ -5,8 +5,8 @@
 #load "Codegen.fs"
 #load "CConsole.fs"
 #load "ParserLibrary.fs"
-#load "AST.fs"
 #load "TypeSystem.fs"
+#load "AST.fs"
 #load "Stdlib.fs"
 #load "TypeError.fs"
 #load "TypedAST.fs"
@@ -15,6 +15,7 @@
 open FParsec
 open ChakraFparsec
 
+let trim (addlChars: char array) (s: string) = s.TrimStart([| '\n'; '\t'; ' '|]).TrimEnd(Array.append [| '\t'; ' '|] addlChars)
 
 
 (********************************************
@@ -59,19 +60,49 @@ let listOfIntsExprListFix = sprintf "%s\n" listOfIntsFix
 let simpleApplyFix = "some-func(\"Hello?\")"
 let numberOnlyExprListFix = "1\n"
 let applyOnlyExprListFix = "some-func(1)\n"
-let simplestBindingFix = "a =\n\t1\n"
+let simplestBindingFix = "a = 1\n"
+let simpleBindingWithStringFix =
+    """f = "Hello"
+    """
+let simpleBindingWithListFix =
+    """f = [1, x]
+    """
+let simpleBindingWithTupleFix =
+    """f = ("ok", x)
+    """
+let simpleBindingWithStructFix =
+    """f = %( contents = x )
+    """
+let simpleBindingWithMapFix =
+    """f = %[ "Hello" = 1 ]
+    """
+let simpleBindingWithBindingInELFix =
+    """
+f =
+    b = 2
+    [x, b]
+    """.TrimStart([| '\n'; '\t'; ' '|]).TrimEnd([| '\t'; ' '|])
+let simpleBindingWithStructBindingInELFix =
+    """
+f =
+    b = %( contexts = x )
+    [x, b]
+    """.TrimStart([| '\n'; '\t'; ' '|]).TrimEnd([| '\t'; ' '|])
 let simplestFunctionBindingFix = "f(x) = 1\n"
 let functionBindingWithStringFix =
     """f(x) = "Hello"
     """
+let annotatedFunctionBindingWithStringFix =
+    """f(x: a): "" = "Hello"
+    """
 let functionBindingWithSymbolFix =
-    """f(x) = #testing
+    """f(x) = Testing
     """
 let functionBindingWithListFix =
     """f(x) = [1, x]
     """
 let functionBindingWithTupleFix =
-    """f(x) = (#ok, x)
+    """f(x) = ("ok", x)
     """
 let functionBindingWithStructFix =
     """f(x) = %( contents = x )
@@ -84,6 +115,15 @@ let fnBindingWithBindingInELFix =
 f(x) =
     b = 2
     [x, b]
+    """.TrimStart([| '\n'; '\t'; ' '|]).TrimEnd([| '\t'; ' '|])
+let fnBindingWithApplyBindingInELFix =
+    """
+init(caps) =
+    ping = spawn(pinger, cmd.send(caps.self, ""))
+    (
+        %( pinger = ping ),
+        1
+    )
     """.TrimStart([| '\n'; '\t'; ' '|]).TrimEnd([| '\t'; ' '|])
 let simpleVarHeadMatchFix = 
     """
@@ -100,6 +140,104 @@ caps ?
 
     """.TrimStart([| '\n'; '\t'; ' '|]).TrimEnd([| '\t'; ' '|])
 
+let simpleLambda = "{ (a) -> add(a, b) }"
+let nullaryLambda = "{ () -> add(a, b) }"
+
+let simpleCompleteModule =
+    """
+= %( init )
+
+%( io ) = /std
+
+init(caps) =
+    io.print(caps.stdio, "Hello World!")
+""" |> trim [||]
+
+let complexCompleteModule =
+    """
+= %( init, receive )
+
+%( io, cmd, spawn ) = /stdlib
+
+init(caps) =
+    ping = spawn(pinger, { () -> cmd.send(caps.self, "") })
+    ( %( pinger = ping ), io.print(caps.stdio, "Hello World!") )
+
+receive(state, msg) =
+    msg ?
+    | Ping ->
+        ( state, cmd.send(state.pinger, Pong) )
+
+pinger = %( init = pinger-init, receive = pinger-receive )
+
+pinger-init(ping) =
+    ( %( pinger = ping ), ping() )
+
+pinger-receive(state, msg) =
+    msg ?
+    | Pong ->
+        ( state, state.pinger() )
+""" |> trim [||]
+
+let addNewline = [| '\n' |]
+
+let cm1 =
+    """
+= %( init, receive )
+    """ |> trim addNewline
+
+let cm2 =
+    """
+%( io, cmd, spawn ) = /stdlib
+    """ |> trim addNewline
+
+let cm3a =
+    """
+ping =
+    spawn(pinger, cmd.send(caps.self, ""))
+(%(pinger = ping), io.print(caps.stdio, "Hello World!"))
+    """ |> trim [||]
+
+let cm3 =
+    """
+init(caps) =
+    ping = spawn(pinger, cmd.send(caps.self, ""))
+    (%(pinger = ping), io.print(caps.stdio, "Hello World!"))
+    """ |> trim addNewline
+
+let cm4 =
+    """
+receive(state, msg) =
+    msg ?
+    | Ping ->
+        ( state, cmd.send(state.pinger, Pong) )
+    """ |> trim addNewline
+
+let cm5 =
+    """
+pinger = %( init = pinger-init, receive = pinger-receive )
+    """ |> trim addNewline
+
+let cm6 =
+    """
+pinger-init(ping) =
+    ( %( pinger = ping ), ping() )
+    """ |> trim addNewline
+
+let cm7 =
+    """
+pinger-receive(state, msg) =
+    msg ?
+    | Pong ->
+        ( state, state.pinger() )
+    """ |> trim addNewline
+
+let simpleTypeDef =
+    """
+    Msg =
+        | Ping
+        | Pong
+    """ |> trim addNewline
 
 
 (********************************************
@@ -133,6 +271,8 @@ let exprThenDeadspace =
     <!> "new-school expr list parser"
 
 
+let structDeclWithOneField = TypeSystem.strct ([("a", TypeSystem.str); ("b", TypeSystem.str)], false)
+
 (********************************************
 *
 * Tests
@@ -141,14 +281,27 @@ let exprThenDeadspace =
 
 
 
-type ChakraTest = (unit -> Result<string, string * string>)
+type ChakraTest = ((unit -> string * Result<string, string * string>))
 
 let test (label: string) parser (str: string) () =
     match run (parser .>> eof) str with
-    | Success (r, _, _) ->
-        Result.Ok label
+    | Success _ ->
+        (label, Result.Ok label)
     | Failure (e, _, _) ->
-        Result.Error (label, e)
+        (label, Result.Error (label, e))
+
+
+let typeTest (label: string) (decl: string) (ty: TypeSystem.Type) () =
+    match run (chakraTypeExpr .>> eof) decl with
+    | Success (parsed, _, _) ->
+        let typ = parsed.ToType
+        if typ = ty then
+            (label, Result.Ok label)
+        else
+            let e = sprintf "%O did not match %O" typ ty
+            (label, Result.Error (label, e))
+    | Failure (e, _, _) ->
+        (label, Result.Error (label, e))
 
 let (tests: ChakraTest list) =
     [ test "Module def" chakraModuleDef moduleDefFix
@@ -169,10 +322,8 @@ let (tests: ChakraTest list) =
       test "Integer" chakraNumber numberIntFix
       test "Float" chakraNumber numberFloatFix
       test "Simple String" chakraString (""" "This is a string" """.Trim([|' '|]))
-      test "Global symbol" chakraSymbol "#Some-Symbol"
-      test "Local symbol" chakraSymbol "#ok"
       test "Simple tuple" chakraTuple "(1, 1)"
-      test "Nested Tuple" chakraTuple "( 1, ( #ok, \"string\" ) )"
+      test "Nested Tuple" chakraTuple "( 1, Ok(\"string\") )"
       test "Simple struct" chakraStruct "%( a = 1 )"
       test "Struct with two fields" chakraStruct "%( num = 1, string = \"Hello\" )"
       test "Struct with punning" chakraStruct "%( num, string )"
@@ -189,10 +340,8 @@ let (tests: ChakraTest list) =
       test "Integer as expression" chakraExpr numberIntFix
       test "Float as expression" chakraExpr numberFloatFix
       test "Simple String as expression" chakraExpr (""" "This is a string" """.Trim([|' '|]))
-      test "Global symbol as expression" chakraExpr "#Some-Symbol"
-      test "Local symbol as expression" chakraExpr "#ok"
       test "Simple tuple as expression" chakraExpr "(1, 1)"
-      test "Nested Tuple as expression" chakraExpr "( 1, ( #ok, \"string\" ) )"
+      test "Nested Tuple as expression" chakraExpr "( 1, Ok(\"string\") )"
       test "Simple struct as expression" chakraExpr "%( a = 1 )"
       test "Struct with two fields as expression" chakraExpr "%( num = 1, string = \"Hello\" )"
       test "Struct with punning as expression" chakraExpr "%( num, string )"
@@ -205,10 +354,18 @@ let (tests: ChakraTest list) =
       test "Pipe expression" chakraPipeExpr "something\n> else(1)\n"
       test "Pipe with all applies" chakraPipeExpr "head(list)\n> add(2)\n> mul(3)\n> div(6)\n"
       test "Simple binding" chakraBinding simplestBindingFix
+      test "Simple Binding With String Fix" chakraBinding simpleBindingWithStringFix
+      test "Simple Binding With List Fix" chakraBinding simpleBindingWithListFix
+      test "Simple Binding With Tuple Fix" chakraBinding simpleBindingWithTupleFix
+      test "Simple Binding With Struct Fix" chakraBinding simpleBindingWithStructFix
+      test "Simple Binding With Map Fix" chakraBinding simpleBindingWithMapFix
+      test "Simple Binding With Binding In El Fix" chakraBinding simpleBindingWithBindingInELFix
+      test "Simple Binding With Struct Binding in El Fix" chakraBinding simpleBindingWithStructBindingInELFix
       test "Destructured binding" chakraBinding "%( a, b ) = get-struct(arg)"
       test "Number-only expr list" chakraExprList numberOnlyExprListFix
       test "List of integers expr list" chakraExprList listOfIntsExprListFix
       test "Function binding with binding in expr list" chakraBinding fnBindingWithBindingInELFix
+      test "Function with apply binding in expression list" chakraBinding fnBindingWithApplyBindingInELFix
       test "Apply-only expr list" chakraExprList applyOnlyExprListFix
       test "Simple Match Head" matchHead "some-var ?\n"
       test "simple match clause" chakraMatchClause "| _ -> 1"
@@ -218,30 +375,64 @@ let (tests: ChakraTest list) =
       test "Match expression as expression" chakraExpr simpleVarHeadMatchFix
       test "Simplest Function Binding" chakraBinding simplestFunctionBindingFix
       test "Function Binding With String" chakraBinding functionBindingWithStringFix
+      test "Annotated Function Binding With String" chakraBinding annotatedFunctionBindingWithStringFix
       test "Function Binding With Symbol" chakraBinding functionBindingWithSymbolFix
       test "Function Binding With List" chakraBinding functionBindingWithListFix
       test "Function Binding With Tuple" chakraBinding functionBindingWithTupleFix
       test "Function Binding With Struct" chakraBinding functionBindingWithStructFix
-      test "Function Binding With Map" chakraBinding functionBindingWithMapFix ]
+      test "Function Binding With Map" chakraBinding functionBindingWithMapFix
+      test "Simple lambda" chakraLambda simpleLambda
+      test "Nullary lambda" chakraLambda nullaryLambda
+      test "Type identifier" pTypeIdent "String"
+      test "Zero arg type constructor" (attempt pTypeConstructor <|> noArgConstructor ()) "Cmd"
+      test "One arg type constructor" (attempt pTypeConstructor <|> noArgConstructor ()) "Maybe(a)"
+      test "Simple type definition" chakraTypeDef simpleTypeDef
+      test "Simple complete module" (chakraModule "Testing") simpleCompleteModule
+      test "Complex complete module" (chakraModule "Testing") complexCompleteModule
+      test "Module Definition 1"  chakraModuleDef cm1
+      test "Import" chakraImport cm2
+      test "Expr list" chakraExprListRef.Value cm3a
+      test "Binding 1"  chakraBinding cm3
+      test "Binding 2"  chakraBinding cm4
+      test "Binding 3"  chakraBinding cm5
+      test "Binding 4"  chakraBinding cm6
+      test "Binding 5"  chakraBinding cm7
+      test "lib.chakra" (chakraModule "./libs/lib-a/lib.chakra") (System.IO.File.ReadAllText "../Examples/test/libs/lib-a/lib.chakra")
+      test "ping-pong/main.chakra" (chakraModule "./main.chakra") (System.IO.File.ReadAllText "../Examples/ping-pong/main.chakra")
+      typeTest "String declaration" "\"\"" TypeSystem.str
+      typeTest "Number declaration" "#" TypeSystem.num
+      typeTest "Tuple of string and string declaration" "( \"\", \"\" )" (TypeSystem.tup [TypeSystem.str; TypeSystem.str])
+      typeTest "Tuple of string and nunber declaration" "( \"\", # )" (TypeSystem.tup [TypeSystem.str; TypeSystem.num])
+      typeTest "Struct with one field declaration" "%( a = \"\", b = \"\" )" structDeclWithOneField
+      typeTest "List declaration with generic type" "[ a ]" (TypeSystem.list (TypeSystem.genA))
+      typeTest "Map declaration" "%[ \"\" = a ]" (TypeSystem.map TypeSystem.str TypeSystem.genA)
+      typeTest "Custom type declaration" "Maybe(\"\")" (TypeSystem.CustomType ("Maybe", [TypeSystem.str]))
+      typeTest "Custom type declaration with no args" "Msg" (TypeSystem.CustomType ("Msg", [])) ]
 
 
 
 (********************************************
 *
-* Test runner
+* # Test runner
 *
 *********************************************)
 
 
 
-let runTest t =
+let runTest (filter: string) (successes: int, failures: int, skipped: int) (t: ChakraTest) =
     match t () with
-    | Result.Ok label ->
+    | (l, Result.Ok label) when l.Contains(filter) ->
         CConsole.green label
         |> printfn "%s"
-    | Result.Error (label, diag) ->
+
+        (successes + 1, failures, skipped)
+    | (l, Result.Error (label, diag)) when l.Contains(filter) ->
         CConsole.red diag
         |> printfn "%s:\n%s" label
+
+        (successes, failures + 1, skipped)
+    | _ ->
+        (successes, failures, skipped + 1)
 
 let startBannerText = "Chakra Fparsec-base Parser Tests START"
 let width = System.Console.BufferWidth
@@ -250,10 +441,15 @@ printfn "%s" startBannerText
 printfn "\n%s\n" (String.replicate width "-")
 
 let timer = System.Diagnostics.Stopwatch.StartNew ()
-List.iter runTest tests
+let (successes, failures, skipped) = List.fold (runTest "") (0, 0, 0) tests
 timer.Stop ()
 
 printfn "\n%s\n" (String.replicate width "-")
+printfn "Successed: %i, Failed: %i, Skipped: %i" successes failures skipped
 let endBannerText = sprintf "Chakra Fparsec-base Parser Tests FINISHED %i tests IN %i ms" (tests.Length) (timer.ElapsedMilliseconds)
 printfn "%s" endBannerText
 printfn "\n%s\n" (String.replicate width "=")
+// if failures > 0 then
+//     exit 1
+// else
+//     exit 0

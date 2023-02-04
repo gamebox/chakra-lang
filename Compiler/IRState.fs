@@ -60,7 +60,6 @@ let empty triple datalayout =
           Env =
               List.fold
                   (fun e (id, ty) ->
-                    printfn "Loading stdlib module %s as %O" id ty
                     Env.add (id, (Llvm.globalId (sprintf "Chakra_stdlib__%s" id), ty)) e)
                   (Env.empty ())
                   Stdlib.stdlibExports }

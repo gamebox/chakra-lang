@@ -160,7 +160,7 @@ let stdlib = """
 
 let rec printChakraType (ty: TypeSystem.Type) =
     match ty with
-    | TypeSystem.StructType (fields, _, _) ->
+    | TypeSystem.StructType (fields, _) ->
         List.map (printChakraType << snd) fields
         |> String.concat ", "
         |> sprintf "{ %s }*"
@@ -170,8 +170,6 @@ let rec printChakraType (ty: TypeSystem.Type) =
             |> String.concat ", "
 
         sprintf "%s (%s)*" (printChakraType ret) irArgs
-    | TypeSystem.CapabilityType _ -> "i64"
-    | TypeSystem.CommandType _ -> "%struct.Envelope*"
     | TypeSystem.StringType _ -> "i8*"
     | TypeSystem.NumberType -> "double"
     | _ ->

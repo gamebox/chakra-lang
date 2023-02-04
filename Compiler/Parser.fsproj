@@ -1,17 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net50</TargetFramework>
+    <TargetFramework>net60</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Command.fs" />
+    <Compile Include="HM.fs" />
     <Compile Include="RunProcess.fs" />
     <Compile Include="Operators.fs" />
     <Compile Include="Graph.fs" />
     <Compile Include="Codegen.fs" />
     <Compile Include="CConsole.fs" />
     <Compile Include="ParserLibrary.fs" />
-    <Compile Include="AST.fs" />
     <Compile Include="TypeSystem.fs" />
+    <Compile Include="AST.fs" />
     <Compile Include="Stdlib.fs" />
     <Compile Include="TypeError.fs" />
     <Compile Include="TypedAST.fs" />
@@ -19,13 +21,13 @@
     <Compile Include="ChakraParser.fs" />
     <Compile Include="Pretty.fs" />
     <Compile Include="Env.fs" />
-    <Compile Include="TypeGraph.fs" />
+    <Compile Include="Unify.fs" />
+    <!-- <Compile Include="TypeGraph.fs" />
     <Compile Include="Annotate.fs" />
-    <!-- <Compile Include="Unify.fs" /> -->
     <Compile Include="Command.fs" />
     <Compile Include="Llvm.fs" />
     <Compile Include="IRState.fs" />
-    <Compile Include="Generate.fs" />
+    <Compile Include="Generate.fs" /> -->
     <Compile Include="Build.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

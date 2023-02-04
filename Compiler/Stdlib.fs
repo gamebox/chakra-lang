@@ -2,7 +2,12 @@ module Stdlib
 
 open TypeSystem
 
-let stdlibModule fields = StructType (fields, false, None)
+let stdlibModule fields = StructType (fields, false)
+
+let stdio = custom0 "Stdio"
+let cmd = custom0 "Cmd"
+let actor = custom "Actor" [gen "init"; gen "msg" ]
+let actorRef = custom "Ref" [gen "msg"]
 
 let stdlibMath =
     stdlibModule [ ("add", fn [ "a", num; "b", num ] num)
@@ -58,13 +63,14 @@ let stdlibList =
                    ("fold",
                     fn
                         [ "fn", fn [ "state", genB; "item", genA ] genB
-                          "list", list (genA) ]
+                          "list", list (genA)
+                          "state", genB]
                         genB) ]
 
 let stdlibIo =
     stdlibModule [ ("print",
                     fn
-                        [ "cap", cap StdioCapability
+                        [ "cap", stdio
                           "str", str ]
                         (cmd)) ]
 
@@ -85,18 +91,15 @@ let actorDef =
     strct (
         [ "init", initFuncTy
           "receive", receiveFuncTy ],
-        false,
-        None
+        false
     )
 
 let stdlibActors =
     stdlibModule [ ("spawn",
                     fn
-                        [ "actor", (ActorType(gen "init", gen "msg"))
+                        [ "actor", (actor)
                           "init", gen "init" ]
-                        (RefType(gen "msg")))
-                   ("make", fn [ "def", actorDef ] (ActorType(gen "init", gen "msg")))
-
+                        cmd)
                     ]
 
 let stdlibExports =

@@ -1,10 +1,8 @@
 module Build
 
 open System.IO
-open System.Text.RegularExpressions
 open ChakraFparsec
 open AST
-open Pretty
 open TypedAST
 
 let rec gatherFiles filter directory =
@@ -174,95 +172,96 @@ let importedModules ({ Imports = imports }: ChakraModule) modulePath =
                     i.Library
                 else
                     sprintf "/libs/%s" i.Library
-            | ChakraPackageImport i -> sprintf "/pkgs%s" i.PackageName)
+            | ChakraPackageImport i -> sprintf "/pkgs/%s" i.PackageName)
         imports
     |> List.filter ((<>) "/pkgs/stdlib")
 
 let relativePath root path = Path.GetRelativePath(root, path)
 
-let verifyProject (ParsedProject (Project (name, root, v), modules)) =
-    printPhase "Verifying" false
+// let verifyProject (ParsedProject (Project (name, root, v), modules)) =
+//     printPhase "Verifying" false
 
-    let sortResult =
-        Map.toList modules
-        |> List.map (fun (s, m) -> (s, m, importedModules m s))
-        |> Graph.withNodes<string, ChakraModule>
-        |> Graph.sort
+//     let sortResult =
+//         Map.toList modules
+//         |> List.map (fun (s, m) -> (s, m, importedModules m s))
+//         |> Graph.withNodes<string, ChakraModule>
+//         |> Graph.sort
 
-    match sortResult with
-    | Some sortedModules ->
-        let (stdlib: TCModule) =
-            { DocComments = None
-              Bindings = []
-              ExportMap = Map(Stdlib.stdlibExports)
-              Imports = [] }
+//     match sortResult with
+//     | Some sortedModules ->
+//         let (stdlib: TCModule) =
+//             { DocComments = None
+//               Bindings = []
+//               ExportMap = Map(Stdlib.stdlibExports)
+//               Imports = [] }
 
-        let blah (acc: Result<Map<string, TCModule>, TypeError.TypeError>) (path, module') =
-            match acc with
-            | Ok envs ->
-                // printfn "Annotating module %s\n---------------\n%O" path module'
+//         let buildTypedModules (acc: Result<Map<string, TCModule>, TypeError.TypeError>) (path, module') =
+//             match acc with
+//             | Ok envs ->
+//                 // printfn "Annotating module %s\n---------------\n%O" path module'
 
-                Annotate.annotate path module' envs
-                |> Result.map (fun e -> Map.add path e envs)
-            | _ ->
-                printf "Skipping annotation for %s" path
-                acc
+//                 Annotate.annotate path module' envs
+//                 |> Result.map (fun e -> Map.add path e envs)
+//             | _ ->
+//                 printf "Skipping annotation for %s" path
+//                 acc
 
-        // printfn "%O" (List.map ((modName root) << (relativePath root) << fst) sortedModules)
+//         // printfn "%O" (List.map ((modName root) << (relativePath root) << fst) sortedModules)
 
-        List.fold blah (Ok(Map [ "/stdlib", stdlib ])) sortedModules
-        |> Result.mapError (fun e -> BuildTypeError [ e ])
-        |> Result.map (fun mods -> VerifiedProject(Project(name, root, v), mods))
-    | None -> Error BuildImportError
+//         List.fold buildTypedModules (Ok(Map [ "stdlib", stdlib ])) sortedModules
+//         |> Result.mapError (fun e -> BuildTypeError [ e ])
+//         |> Result.map (fun mods -> VerifiedProject(Project(name, root, v), mods))
+//     | None -> Error BuildImportError
 
-let generateIR (VerifiedProject (p, mods)) =
-    printPhase "Generating IR" false
+// let generateIR (VerifiedProject (p, mods)) =
+//     printPhase "Generating IR" false
 
-    Generate.generate mods (Set.empty)
-    |> Result.mapError (fun _ -> BuildIRError)
-    |> Result.map (fun llvm -> LoweredProject(p, llvm))
+//     Generate.generate mods (Set.empty)
+//     |> Result.mapError (fun _ -> BuildIRError)
+//     |> Result.map (fun llvm -> LoweredProject(p, llvm))
 
-let writeToDisk (LoweredProject (Project (name, root, v), llvm)) =
-    printPhase "Writing to disk" false
-    // Make sure the local has a bin directory, if not create it
-    // Write the file to "PROJECT_NAME.ll"
-    let buildDir = sprintf "%s/.build" root
+// let writeToDisk (LoweredProject (Project (name, root, v), llvm)) =
+//     printPhase "Writing to disk" false
+//     // Make sure the local has a bin directory, if not create it
+//     // Write the file to "PROJECT_NAME.ll"
+//     let buildDir = sprintf "%s/.build" root
 
-    if not (System.IO.Directory.Exists buildDir) then
-        System.IO.Directory.CreateDirectory(buildDir)
-        |> ignore
+//     if not (System.IO.Directory.Exists buildDir) then
+//         System.IO.Directory.CreateDirectory(buildDir)
+//         |> ignore
 
-    let llvmPath = sprintf "%s/%s.ll" buildDir name
-    System.IO.File.WriteAllText(llvmPath, llvm)
-    Ok(WrittenProject(Project(name, root, v), llvmPath))
+//     let llvmPath = sprintf "%s/%s.ll" buildDir name
+//     System.IO.File.WriteAllText(llvmPath, llvm)
+//     Ok(WrittenProject(Project(name, root, v), llvmPath))
 
-let linkAndCompile (WrittenProject (Project (name, root, v), llvmPath)) =
-    printPhase "Compiling executable" false
+// let linkAndCompile (WrittenProject (Project (name, root, v), llvmPath)) =
+//     printPhase "Compiling executable" false
 
-    let rtPath =
-        System.Environment.GetEnvironmentVariable("CHAKRA_RUNTIME_PATH")
-        |> System.IO.Path.GetFullPath
+//     let rtPath =
+//         System.Environment.GetEnvironmentVariable("CHAKRA_RUNTIME_PATH")
+//         |> System.IO.Path.GetFullPath
 
-    let inputs =
-        gatherFiles (fun f -> f.EndsWith(".c") || f.EndsWith(".h")) rtPath
-        |> String.concat " "
+//     let inputs =
+//         gatherFiles (fun f -> f.EndsWith(".c") || f.EndsWith(".h")) rtPath
+//         |> String.concat " "
 
-    let output = sprintf "%s/.build/%s" root name
+//     let output = sprintf "%s/.build/%s" root name
 
-    let args =
-        sprintf "%s %s -lpthread -lm" inputs llvmPath
+//     let args =
+//         sprintf "%s %s -lpthread -lm" inputs llvmPath
 
-    let (time, outputs, errs) = RunProcess.runProc "clang" args
+//     let (time, outputs, errs) = RunProcess.runProc "clang" args
 
-    match Seq.toList errs with
-    | [] ->
-        System.IO.File.Delete(output)
-        System.IO.File.Move("./a.out", output)
-        printfn "%s" (String.concat "\n" outputs)
+//     match Seq.toList errs with
+//     | [] ->
+//         System.IO.File.Delete(output)
+//         System.IO.File.Move("./a.out", output)
+//         printfn "%s" (String.concat "\n" outputs)
 
-        printfn "Wrote executable '%s' in %ims " output (time)
-        |> Ok
-    | _ -> Error(BuildIOError(sprintf "Failed to write '%s' after %ims:\n\n%s" output time (String.concat "\n" errs)))
+//         printfn "Wrote executable '%s' in %ims " output (time)
+//         |> fun () -> Ok output
+//     | _ ->
+//         Error(BuildIOError(sprintf "Failed to write '%s' after %ims:\n\n%s" output time (String.concat "\n" errs)))
 
 let build optPath =
     let buildResult =
@@ -270,13 +269,15 @@ let build optPath =
         |> Path.GetFullPath
         |> projectFromMetadata
         .>>. parseProjectFiles
-        .>>. verifyProject
-        .>>. generateIR
-        .>>. writeToDisk
-        .>>. linkAndCompile
+        // .>>. verifyProject
+        // .>>. generateIR
+        // .>>. writeToDisk
+        // .>>. linkAndCompile
 
     match buildResult with
-    | Ok () -> printPhase "DONE" false
+    | Ok _ ->
+        printPhase "DONE" false
+        // printfn "Executable can be found at %s" output
     | Error err ->
         match err with
         | BuildParseError (_, (e, _, _)) -> printfn "Parse error:\n%s" (CConsole.red e)

@@ -5,16 +5,18 @@
 ;; and receive functions, but here only init.  That signifies
 ;; that this is an Actor that will not be sent any messages.
 = %(
-    init,
+    main,
 )
 
 ; This is importing the stdlib's IO library
 
-%( io, do ) = /stdlib
+%( io, Actor, Cmd, Capabilities, cmd, actor ) = /stdlib
 
 ; print is a function that is destructured from the
 ; library
 %( print ) = io
+
+main = Task(init)
 
 ;; This is the function called on the Actor when it is
 ;; first being created.  The Main Actor is passed a struct
@@ -24,23 +26,35 @@ init(caps) =
     ; data to stdio.  It is destructured here.
     %( stdio ) = caps
 
-    ; The return value of the init function for the Main
-    ; Actor should be a state for the Actor (here an empty
-    ; tuple - also known as unit) and a list of messages to
-    ; send.
-    (
-        (),
-        [
-            ; This creates a message that is sent to the root
-            ; process that causes the string argument to be
-            ; printed to stdio.  Notice that it takes the
-            ; capability as an argument to be run. Capabilities
-            ; can be passed around, but never recreated.
-            print(stdio, "Hello world!")
-        ]
-    )
+    ; This creates a message that is sent to the root
+    ; process that causes the string argument to be
+    ; printed to stdio.  Notice that it takes the
+    ; capability as an argument to be run. Capabilities
+    ; can be passed around, but never recreated.
+    print(stdio, "Hello world!")
 
 ; ;; The above could be rewritten as:
 ; init(caps) =
+    ; ; The return value of the init function for the Main
+    ; ; Actor should be a state for the Actor (here an empty
+    ; ; tuple - also known as unit) and a list of messages to
+    ; ; send.
+    ; (
+    ;     (),
+    ; )
 ;    print(caps.stdio, "Hello World AGAIN!")
 ;    > do
+
+PongMsg =
+    | Ping
+
+PongState = (Ref(Pong))
+
+pong-init(pinger: Ref(Ping)): (PongState, Cmd) =
+    (pinger, cmd.none)
+
+pong-receive(msg: PongMsg, state: PongState): (PongState, Cmd) =
+    ( pinger ) = state
+    msg ?
+    | Ping -> (state, actors.send(pinger, Pong))
+

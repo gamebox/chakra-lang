@@ -207,17 +207,6 @@ let chakraVar =
     pVar |> withSpan |>> ChakraVar
     <?> "Var"
 
-let pSymbol = pchar '#' >>. pBaseIdentifier
-
-let createSymbol (span: Span, str: string) =
-    if System.Char.IsUpper((str.ToCharArray()).[0]) then
-        ChakraSymbol(span, (sprintf "%s/%s" !moduleName str))
-    else
-        ChakraSymbol(span, str)
-
-let chakraSymbol =
-    pSymbol |> withSpan |>> createSymbol <?> "symbol"
-
 let (|>?) opt f =
     match opt with
     | None -> ""
@@ -445,11 +434,13 @@ let chakraMap =
     pMap createPair chakraExpr chakraExpr |> withSpan
     |>> createMap
 
+let createArgs (args: String list) = List.map (fun args -> (args, None)) args
+
 let chakraLambda =
     let stringTuple =
         container leftParen rightParen pBaseIdentifier
 
-    let createRecord (span, (args, body)) = (span, { Args = args; Body = body })
+    let createRecord (span, (args, body)) = (span, { Args = createArgs args; Body = body; Ret = None })
 
     between leftCurly (stringTuple .>> arrow .>>. chakraExprList) rightCurly
     |> withSpan
@@ -469,8 +460,6 @@ let cpIgnore =
 let cpVar = pBaseIdentifier |> withSpan |>> CPVar
 
 let cpNumber = pNumber |> withSpan |>> CPNumber
-
-let cpSymbol = pSymbol |> withSpan |>> CPSymbol
 
 let cpString = pCString |> withSpan |>> CPString
 
@@ -639,7 +628,6 @@ let chakraPipe =
                  chakraVar
                  chakraNumber
                  chakraString
-                 chakraSymbol
                  chakraList
                  chakraMap
                  chakraLambda ]
@@ -661,7 +649,11 @@ let chakraBindingPattern =
     let func =
         pBaseIdentifier
         .>>. container leftParen rightParen pBaseIdentifier
-        |>> fun (name, args) -> ChakraFunctionBindingPattern { Name = name; Args = args }
+        |>> fun (name, args) -> ChakraFunctionBindingPattern {
+            Name = name
+            Args = List.map (fun (arg) -> (arg, None)) args
+            Ret = None
+        }
         <?> "function binding pattern"
 
     let complex =
@@ -772,7 +764,8 @@ let chakraModule modName =
         { DocComments = comment
           Exports = exports
           Bindings = bindings
-          Imports = imports }
+          Imports = imports
+          Types = [] }
 
     let topLevelBindings =
         let content ({ Content = c; IsDoc = _ }) = c
@@ -807,7 +800,6 @@ let chakraMetdata =
     let metadataExpr =
         choice [ chakraNumber
                  chakraString
-                 chakraSymbol
                  chakraList
                  chakraMap ]
 
@@ -831,7 +823,6 @@ let chakraMetdata =
 chakraPatternRef
 := choice [ cpNumber
             cpString
-            cpSymbol
             cpTuple
             cpList
             cpStruct
@@ -842,7 +833,6 @@ chakraPatternRef
 chakraExprRef
 := choice [ chakraNumber
             chakraString
-            chakraSymbol
             chakraTuple
             chakraList
             chakraStruct

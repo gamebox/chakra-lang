@@ -4,17 +4,22 @@ open System
 open FParsec
 open AST
 
-let withSpan (p: Parser<'a, unit>): Parser<ParserLibrary.Span * 'a, unit> =
+let withSpan (p: Parser<'a, unit>): Parser<Span * 'a, unit> =
     getPosition
     .>>.? p
     .>>.? getPosition
     |>> (fun ((pos1, r), pos2) ->
-        let (span: ParserLibrary.Span) =
+        let (span: Span) =
                 { Start = { Line = pos1.Line |> int
                             Column = pos1.Column |> int }
                   End = { Line = pos2.Line |> int
                           Column = pos2.Column |> int } }
         (span, r))
+
+
+let flattenTuple (a, (b, c)) = (a, b, c)
+
+let tossRight (l, _) = l
 
 let charListToStr charList = String(List.toArray charList)
 
@@ -34,6 +39,9 @@ let chakraExprList, chakraExprListRef =
     createParserForwardedToRef<ChakraExprList, unit> ()
 
 let moduleName = ref ""
+
+let chakraTypeExpr, chakraTypeExprRef =
+    createParserForwardedToRef<ChakraTypeExpr, unit> ()
 
 (* Comments *)
 
@@ -76,7 +84,7 @@ let cleanLine (s: string) = s.TrimStart([| ' ' |])
 *)
 let docComment =
     let docCommentLine =
-        (semi .>>.? semi) >>? many notNewline .>>?newline
+        (semi .>>.? semi) >>? many notNewline .>>? newline
         |>> charListToStr
         |>> cleanLine
 
@@ -212,7 +220,16 @@ let pBaseIdentifier =
     .>>.? many laterSegment
     .>>.? opt questionOrBangOrStar
     |>> convertToIdentifier
-    // <?> "identifier /([A-Za-z]+[a-z]*)(\-{1,2}[A-Za-z]+[a-z]*)*[?!\*]{0,1}/"
+    // <?> "identifier /([A-Za-z]+[a-z]*)(\-[A-Za-z]+[a-z]*)*[?!\*]{0,1}/"
+
+let pVarTypeItem =
+    pBaseIdentifier .>> (spaces1 .>> pchar '=' .>> spaces1) .>>. chakraTypeExpr
+
+let pAnnotation =
+    (pchar ':' .>> spaces1 >>. chakraTypeExpr)
+
+let pArgItemWithAnno =
+    pBaseIdentifier .>>. opt pAnnotation
 
 let pVar =
     pBaseIdentifier
@@ -221,17 +238,6 @@ let pVar =
 let chakraVar =
     pVar |> withSpan |>> ChakraVar
     <??> "Var"
-
-let pSymbol = pchar '#' >>? pBaseIdentifier
-
-let createSymbol (span: ParserLibrary.Span, str: string) =
-    if System.Char.IsUpper((str.ToCharArray()).[0]) then
-        ChakraSymbol(span, (sprintf "%s/%s" !moduleName str))
-    else
-        ChakraSymbol(span, str)
-
-let chakraSymbol =
-    pSymbol |> withSpan |>> createSymbol <?> "symbol"
 
 let (|>?) opt f =
     match opt with
@@ -298,11 +304,11 @@ let (pRest: Parser<string, unit>) = pstring "..." <?> "rest"
 
 let containerItemSeparator = pchar ','
 
-let emptyContainer start end' = start .>>?end'
+let emptyContainer start end' = start .>>? end'
 
 let container start end' (item: Parser<'a, unit>): Parser<'a list, unit> =
     let items =
-        sepBy1 item (containerItemSeparator .>>? deadOrWhitespace)
+        sepEndBy1 item (containerItemSeparator .>>? deadOrWhitespace)
         .>>?opt containerItemSeparator
         .>>? opt deadOrWhitespace
 
@@ -356,8 +362,8 @@ let chakraTuple =
 let pStruct
     start
     (value: Parser<'a, unit>)
-    (pairConstructor: (ParserLibrary.Span * (String * 'a) -> 'b))
-    (punnedConstructor: (ParserLibrary.Span * string) -> 'b)
+    (pairConstructor: (Span * (String * 'a) -> 'b))
+    (punnedConstructor: (Span * string) -> 'b)
     =
     let structPair =
         let regularPair =
@@ -437,22 +443,183 @@ let chakraMap =
     |>> createMap
 
 let chakraLambda =
-    let stringTuple =
-        container leftParen rightParen pBaseIdentifier
+    let createRecord (span, ((args, ret), body)) =  ChakraLambda (span, { Args = args; Ret = ret; Body = body })
+    let args: Parser<(string * ChakraTypeExpr option) list, unit> = pTuple pArgItemWithAnno
 
-    let createRecord (span, (args, body)) = (span, { Args = args; Body = body })
+    let contents =
+        args
+        .>>. opt pAnnotation
+        .>>? arrow
+        .>>.? chakraExprList
 
-    between leftCurly rightCurly (stringTuple .>>? arrow .>>.? chakraExprList)
+    between leftCurly rightCurly (args .>>. opt pAnnotation .>>? arrow .>>.? chakraExprList)
     |> withSpan
     |>> createRecord
-    |>> ChakraLambda
     <?> "Lambda"
 
+
+
+(* ## Types *)
+
+
+
+let pTypeIdent =
+    let segment =
+        asciiUpper
+        .>>. many1 asciiLower
+        |>> List.Cons
+        |>> charListToStr
+    
+    many1 segment
+    |>> (fun ss -> String.Join("", ss))
+
+let pTypeVar =
+    many1 asciiLower
+    |>> charListToStr
+
+let pTypeConstructor =
+    pTypeIdent
+    .>>. container leftParen rightParen chakraTypeExpr
+
+let stringDecl =
+    pstring "\"\""
+    |> withSpan
+    |>> fst
+    |>> StringDecl
+    <?> "String type declaration"
+
+let numberDecl =
+    pchar '#'
+    |> withSpan
+    |>> fst
+    |>> NumberDecl
+    <?> "Number type declaration"
+
+//   | TupleDecl of Span * items: ChakraTypeExpr list
+let tupleDecl =
+    container leftParen rightParen chakraTypeExpr
+    |> withSpan
+    |>> TupleDecl
+    <?> "Tuple type declaration"
+//   | StructDecl of Span * fields: (string * ChakraTypeExpr) list
+let structDecl =
+    container structStart rightParen pVarTypeItem
+    |> withSpan
+    |>> StructDecl
+    <?> "Struct type declaration"
+//   | ListDecl of Span * ChakraTypeExpr
+let listDecl =
+    leftBracket
+    .>> spaces
+    >>. chakraTypeExpr
+    .>> spaces
+    .>> rightBracket
+    |> withSpan
+    |>> ListDecl
+    <?> "List type declaration"
+//   | MapDecl of Span * ChakraTypeExpr * ChakraTypeExpr
+let mapDecl =
+    mapStart
+    >>. chakraTypeExpr
+    .>> (spaces1 .>> pchar '=' .>> spaces1)
+    .>>. chakraTypeExpr
+    .>> rightBracket
+    |> withSpan
+    |>> flattenTuple
+    |>> MapDecl
+    <?> "Map type declaration"
+//   | GenericDecl of Span * string
+let genericDecl =
+    pTypeVar
+    |> withSpan
+    |>> GenericDecl
+    <?> "List type declaration"
+//   | CustomDecl of Span * string * (ChakraTypeExpr list)
+let noArgConstructor () : Parser<string * 'a list, unit> =
+    pTypeIdent
+    |>> (fun name -> (name, []))
+
+let customDecl =
+
+    let constructor = attempt pTypeConstructor <|> noArgConstructor ()
+    
+    constructor
+    |> withSpan
+    |>> flattenTuple
+    |>> CustomDecl
+    <?> "Custom type declaration"
+//   | FunctionDecl of Span * ChakraTypeExpr list * ChakraTypeExpr
+let functionDecl =
+    let args = container leftParen rightParen chakraTypeExpr
+
+    let contents = args .>> (spaces1 .>> pstring "->" .>> spaces1) .>>. chakraTypeExpr
+
+    between leftCurly rightCurly contents
+    |> withSpan
+    |>> flattenTuple
+    |>> FunctionDecl
+
+
+chakraTypeExprRef.Value <- choiceL
+        [ stringDecl
+          numberDecl
+          tupleDecl
+          structDecl
+          listDecl
+          mapDecl
+          genericDecl
+          customDecl
+          functionDecl ]
+        "Type declaration"
+
+let pTypeDefHead =
+    let withArgs =
+        pTypeIdent
+        .>>. container leftParen rightParen pTypeVar
+    let noArgs =
+        pTypeIdent
+        |>> (fun id -> (id, []))
+
+    (attempt withArgs) <|> noArgs
+
+
+// Example:
+// Maybe(a) =
+//     | Some(value: a)
+//     | None
+let pChakraCustomType =
+
+    let constructors = 
+        let withArgConstructor =
+            (pTypeConstructor |>> (fun (n, args) -> { Name = n; Args = args }))
+        let noArgConstructor =
+            (pTypeIdent |>> (fun id -> { Name = id; Args = []}))
+        many1 (pchar '|' .>> spaces1 >>. (attempt withArgConstructor <|> noArgConstructor) .>> deadspace) 
+    
+    pTypeDefHead
+    .>> equal
+    .>>. constructors
+    |>> (fun ((name, args), constructors) -> { Name = name; Args = args; Constructors = constructors })
+    |> withSpan
+    |>> ChakraCustomType
+
+
+// Example:
+// ResultList(a) = List(Result(a, Error))
+let pChakraTypeAlias =
+    pTypeDefHead
+    .>> equal
+    .>>. chakraTypeExpr
+    |>> (fun ((name, args), ty) -> { Name = name; Args = args; Ty = ty })
+    |> withSpan
+    |>> ChakraTypeAlias
+
+
+let chakraTypeDef =
+    (attempt pChakraCustomType) <|> pChakraTypeAlias
+
+
 (* Patterns *)
-
-let flattenTuple (a, (b, c)) = (a, b, c)
-
-let tossRight (l, r) = l
 
 let cpIgnore =
     pIgnore |> withSpan |>> tossRight |>> CPIgnore
@@ -460,8 +627,6 @@ let cpIgnore =
 let cpVar = pBaseIdentifier |> withSpan |>> CPVar
 
 let cpNumber = pNumber |> withSpan |>> CPNumber
-
-let cpSymbol = pSymbol |> withSpan |>> CPSymbol
 
 let cpString = pCString |> withSpan |>> CPString
 
@@ -502,10 +667,10 @@ let cpStruct =
         <?> "struct pair separator"
 
     let form =
-        (structStart >>? sepBy1 item sep .>>? rightParen
+        (structStart >>? sepEndBy1 item sep .>>? rightParen
          |>> fun is -> (is, false)
          <?> "regular struct")
-        <|> (structStart >>? sepBy1 item sep
+        <|> (structStart >>? sepEndBy1 item sep
              .>>?sep
              .>>?(pstring "...)" <?> "rest operator")
              |>> (fun is -> (is, true))
@@ -531,6 +696,17 @@ let cpMap =
     pMap createPair chakraPattern chakraPattern
     |> withSpan
     |>> createMap
+
+let cpCustom =
+    let pTypeConstructor =
+        pTypeIdent
+        .>>. container leftParen rightParen chakraPattern
+    let constructor = attempt pTypeConstructor <|> noArgConstructor ()
+
+    constructor
+    |>> (fun (name, ps) -> { Constructor = name; Args = ps }) 
+    |> withSpan
+    |>> CPCustom
 
 
 (* Expressions *)
@@ -617,7 +793,6 @@ let chakraPipe =
               chakraVar
               chakraNumber
               chakraString
-              chakraSymbol
               chakraList
               chakraMap
               chakraLambda ]
@@ -641,8 +816,9 @@ let chakraBindingPattern =
 
     let func =
         pBaseIdentifier
-        .>>.? container leftParen rightParen pBaseIdentifier
-        |>> fun (name, args) -> ChakraFunctionBindingPattern { Name = name; Args = args }
+        .>>.? container leftParen rightParen pArgItemWithAnno
+        .>>. opt pAnnotation
+        |>> fun ((name, args), ret) -> ChakraFunctionBindingPattern { Name = name; Ret = ret; Args = args }
         <?> "function binding pattern"
 
     let complex =
@@ -717,7 +893,7 @@ let chakraImport =
 
     let packageImport (typ, string) =
         ChakraPackageImport
-            { PackageName = sprintf "/%s" string
+            { PackageName = sprintf "%s" string
               Typ = typ }
 
     let eq = (pchar ' ' .>>? pchar '=' .>>? pchar ' ')
@@ -739,21 +915,33 @@ let chakraModuleDef =
     <??> "Module export definition"
 
 let chakraModule modName =
-    moduleName := modName
+    moduleName.Value <- modName
 
     let possibleImportSection =
         sepEndBy chakraImport deadspace <??> "imports"
 
-    let buildModule ((exports, imports), bindings) =
+    let buildModule ((((docComment, exports), imports), tys), bindings) =
         // let comment =
         //     match c with
         //     | None -> None
         //     | Some ({ Content = com }) -> Some com
 
-        { DocComments = None
+        let docCommentString =
+            Option.map (fun c -> c.Content) docComment
+
+        { DocComments = docCommentString
           Exports = exports
           Bindings = bindings
-          Imports = imports }
+          Imports = imports
+          Types = tys }
+
+    let topLevelTypeDefs =
+        let b =
+            opt docComment .>>.? chakraTypeDef
+            |>> snd
+            <??> "type def"
+
+        sepEndBy b (deadspace)
 
     let topLevelBindings =
         let content ({ Content = c; IsDoc = _ }) = c
@@ -765,30 +953,33 @@ let chakraModule modName =
         let b =
             opt docComment .>>.? chakraBinding
             |>> createBinding
-            <?> "top level binding"
+            <??> "top level binding"
 
         sepEndBy1 b (deadspace)
 
-    chakraModuleDef
-    <?> "Module definition"
-    .>>?deadspace
-    .>>.? possibleImportSection
-    <??> "import section"
-    .>>?opt deadspace
-    .>>.? topLevelBindings
+    (opt docComment) <??> "Documentation comments"
+    .>>. chakraModuleDef <??> "Module definition"
+    .>>? deadspace
+    .>>.? possibleImportSection <??> "import section"
+    .>>? opt deadspace
+    .>>.? topLevelTypeDefs
+    .>>? opt deadspace
+    .>>.? topLevelBindings <??> "top level bindings"
     .>>? eof
     |>> buildModule
-    <?> "module"
+
+
 
 (* Metadata *)
 
+
+
 let chakraMetdata =
-    moduleName := "METADATA"
+    moduleName.Value <- "METADATA"
 
     let metadataExpr =
         choice [ chakraNumber
                  chakraString
-                 chakraSymbol
                  chakraList
                  chakraMap ]
 
@@ -799,7 +990,7 @@ let chakraMetdata =
     let meta =
         rawEqual .>>?spaces1
         >>? structStart
-        >>? sepBy1 metadataBinding ((pstring "," .>>?spaces) .>>?deadOrWhitespace)
+        >>? sepEndBy1 metadataBinding ((pstring "," .>>?spaces) .>>?deadOrWhitespace)
         .>>?opt ((pstring "," .>>?spaces) .>>?deadOrWhitespace)
         .>>?rightParen
         |>> Map
@@ -809,24 +1000,21 @@ let chakraMetdata =
 
 (* Set refs *)
 
-chakraPatternRef
-:= choiceL
+chakraPatternRef.Value <- choiceL
         [ cpNumber
           cpString
-          cpSymbol
           cpTuple
           cpList
           cpStruct
           cpMap
           cpIgnore
+          cpCustom
           cpVar ]
         "pattern"
 
-chakraExprRef
-:= choiceL
+chakraExprRef.Value <- choiceL
         [ chakraNumber <!> "chakraNumber"
           chakraString <!> "chakraString"
-          chakraSymbol <!> "chakraSymbol"
           chakraTuple <!> "chakraTuple"
           chakraList <!> "chakraList"
           chakraStruct <!> "chakraStruct"
@@ -845,14 +1033,12 @@ let elBinding =
     .>>? deadspace
     <??> "expression list bindings"
 
-chakraExprListRef
-:= 
-    let justExpr = attempt (chakraExpr |>> (fun e -> ([], e))) <!> "just an expr"
-    let bindingsThenExpr = many elBinding .>>.? chakraExpr <!> "bindings then expr"
+chakraExprListRef.Value <-
+    let bindingsThenExpr = many (attempt elBinding) .>>.? chakraExpr <!> "bindings then expr"
 
-    choice [ attempt bindingsThenExpr; justExpr ]
+    bindingsThenExpr
     .>>? deadspace
     |>> ChakraExprList
     <!> "new-school expr list parser"
-   <??> "expression list"
+    <??> "expression list"
 

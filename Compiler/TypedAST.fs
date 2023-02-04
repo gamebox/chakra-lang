@@ -1,7 +1,6 @@
 module TypedAST
 
 open AST
-open ParserLibrary
 open System
 open TypeSystem
 
@@ -9,7 +8,6 @@ type TCPattern =
     | TCPIgnore of Span
     | TCPVar of Span * string
     | TCPNumber of Span * Decimal
-    | TCPSymbol of Span * string
     | TCPString of Span * string
     | TCPTuple of Span * TCPattern list * Type list
     | TCPStruct of Span * TCPStruct
@@ -106,7 +104,6 @@ and TCExprList =
 and TCExpr =
     | TCVar of (string * (string list) option) * Type
     | TCNumber of Decimal
-    | TCSymbol of string
     | TCString of string
     | TCTuple of TCExpr list * Type
     | TCStruct of TCStruct
@@ -122,7 +119,6 @@ and TCExpr =
         match x with
         | TCVar (_, t) -> t
         | TCNumber _ -> num
-        | TCSymbol string -> SymbolType string
         | TCString _ -> str
         | TCTuple (_, t) -> t
         | TCStruct { Typ = ty } -> ty
@@ -150,7 +146,7 @@ type TCModule =
       Bindings: TCBinding list
       Imports: ChakraImport list }
 
-let tcModuleAsStruct { ExportMap = es } = strct (Map.toList es, false, None)
+let tcModuleAsStruct { ExportMap = es } = strct (Map.toList es, false)
 
 let tcModule (cmod: ChakraModule) exports bs =
     { DocComments = cmod.DocComments

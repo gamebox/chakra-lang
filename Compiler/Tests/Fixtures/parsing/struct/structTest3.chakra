@@ -1,0 +1,5 @@
+%(
+    something = 1,
+    other = "Hello",
+    ...spreader
+)

@@ -1,7 +1,50 @@
 module AST
 
-open ParserLibrary
 open System
+
+type Span = ParserLibrary.Span
+
+type ChakraTypeExpr =
+  | StringDecl of Span
+  | NumberDecl of Span
+  | TupleDecl of Span * items: ChakraTypeExpr list
+  | StructDecl of Span * fields: (string * ChakraTypeExpr) list
+  | ListDecl of Span * ChakraTypeExpr
+  | MapDecl of Span * ChakraTypeExpr * ChakraTypeExpr
+  | GenericDecl of Span * string
+  | CustomDecl of Span * name: string * vars: ChakraTypeExpr list
+  | FunctionDecl of Span * ChakraTypeExpr list * ChakraTypeExpr
+
+  member x.ToType =
+    match x with
+    | StringDecl _ -> TypeSystem.str
+    | NumberDecl _ -> TypeSystem.num
+    | TupleDecl (_, items) -> TypeSystem.tup (List.map (fun (x: ChakraTypeExpr) -> x.ToType) items)
+    | StructDecl (_, fields) -> TypeSystem.strct ((List.map (fun (s, (x: ChakraTypeExpr)) -> (s, x.ToType)) fields), false)
+    | ListDecl (_, item) -> TypeSystem.list item.ToType
+    | MapDecl (_, key, value) -> TypeSystem.map key.ToType value.ToType 
+    | GenericDecl (_, v) -> TypeSystem.gen v
+    | CustomDecl (_, name, vars) -> TypeSystem.CustomType (name, (List.map (fun (x: ChakraTypeExpr) -> x.ToType) vars))
+    | FunctionDecl (_, args, ret) -> TypeSystem.fn (List.map (fun (x: ChakraTypeExpr) -> ("", x.ToType)) args) ret.ToType
+
+and ChakraTypeConstructor =
+    { Name: string
+      Args: ChakraTypeExpr list }
+
+type ChakraCustomType =
+  { Name: string
+    Args: string list
+    Constructors: ChakraTypeConstructor list }
+
+type ChakraTypeAlias =
+  { Name: string
+    Args: string list
+    Ty: ChakraTypeExpr }
+
+type ChakraTypeDef =
+    | ChakraCustomType of Span * ChakraCustomType
+    | ChakraTypeAlias of Span * ChakraTypeAlias
+
 
 [<Struct>]
 type ChakraVar =
@@ -12,12 +55,16 @@ type ChakraPattern =
     | CPIgnore of Span
     | CPVar of Span * string
     | CPNumber of Span * Decimal
-    | CPSymbol of Span * string
     | CPString of Span * string
     | CPTuple of Span * ChakraPattern list
     | CPStruct of Span * CPStruct
     | CPList of Span * CPList
     | CPMap of Span * CPMap
+    | CPCustom of Span * CPCustom
+
+and CPCustom =
+    { Constructor: string
+      Args: ChakraPattern list }
 
 and CPStructField =
     { Loc: Span
@@ -42,7 +89,7 @@ and CPList =
       Rest: (Span * string) option }
 
 [<Struct>]
-type FunctionBindPatternInfo = { Name: string; Args: string list }
+type FunctionBindPatternInfo = { Name: string; Ret: ChakraTypeExpr option; Args: (string * ChakraTypeExpr option) list }
 
 type ChakraIdentifier = ChakraIdentifier of string
 
@@ -78,7 +125,8 @@ and ChakraList =
       Spread: (Span * string) option }
 
 and ChakraLambda =
-    { Args: string list
+    { Args: (string * ChakraTypeExpr option) list
+      Ret: ChakraTypeExpr option
       Body: ChakraExprList }
 
 and ChakraMatch = ChakraMatch of (ChakraExpr * ChakraMatchClause list)
@@ -96,7 +144,7 @@ and ChakraExprList = ChakraExprList of (ChakraBinding list * ChakraExpr)
 and ChakraExpr =
     | ChakraVar of Span * (string * (string list) option)
     | ChakraNumber of Span * Decimal
-    | ChakraSymbol of Span * string
+    | ChakraConsExpr of Span * ((string * (string list)) * ChakraExpr list)
     | ChakraString of Span * string
     | ChakraTuple of Span * ChakraExpr list
     | ChakraStruct of Span * ChakraStruct
@@ -144,4 +192,5 @@ type ChakraModule =
     { DocComments: string option
       Exports: string list
       Bindings: ChakraBinding list
-      Imports: ChakraImport list }
+      Imports: ChakraImport list
+      Types: ChakraTypeDef list }

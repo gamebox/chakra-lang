@@ -32,22 +32,7 @@ actor_id_t Chakra_stdlib__self() {
   return *a;
 }
 
-envelope_t *Chakra_stdlib__spawn(actor_t *actor) {
-  actor_id_t self = Chakra_stdlib__self();
-  actor_id_t recipient = {.process = self.process, .entity = 0};
-  spawn_request_t *spawn_request =
-      (spawn_request_t *)malloc(sizeof(spawn_request_t));
-  *spawn_request = (spawn_request_t){
-      .def = actor, .init_args = NULL, .num_init_args = 0, .spawnee = self};
-  envelope_t *env = (envelope_t *)malloc(sizeof(envelope_t));
-  *env = (envelope_t){
-      .actor_id = recipient,
-      .msg = {.type = SPAWN_REQUEST, .payload = (void *)spawn_request}};
-
-  return env;
-};
-
-envelope_t *Chakra_stdlib__spawn1(actor_t *actor, void *arg0) {
+envelope_t *Chakra_stdlib__spawn(actor_t *actor, void *arg0) {
   // printf("Actor <%p>", actor);
   actor_id_t self = Chakra_stdlib__self();
   actor_id_t recipient = {.process = self.process, .entity = 0};
@@ -57,44 +42,6 @@ envelope_t *Chakra_stdlib__spawn1(actor_t *actor, void *arg0) {
       (spawn_request_t *)malloc(sizeof(spawn_request_t));
   *spawn_request = (spawn_request_t){
       .def = actor, .init_args = args, .num_init_args = 1, .spawnee = self};
-  envelope_t *env = (envelope_t *)malloc(sizeof(envelope_t));
-  *env = (envelope_t){
-      .actor_id = recipient,
-      .msg = {.type = SPAWN_REQUEST, .payload = (void *)spawn_request}};
-
-  return env;
-};
-
-envelope_t *Chakra_stdlib__spawn2(actor_t *actor, void *arg0, void *arg1) {
-  actor_id_t self = Chakra_stdlib__self();
-  actor_id_t recipient = {.process = self.process, .entity = 0};
-  void **args = (void **)malloc(sizeof(void *) * 2);
-  args[0] = arg0;
-  args[1] = arg1;
-  spawn_request_t *spawn_request =
-      (spawn_request_t *)malloc(sizeof(spawn_request_t));
-  *spawn_request = (spawn_request_t){
-      .def = actor, .init_args = args, .num_init_args = 2, .spawnee = self};
-  envelope_t *env = (envelope_t *)malloc(sizeof(envelope_t));
-  *env = (envelope_t){
-      .actor_id = recipient,
-      .msg = {.type = SPAWN_REQUEST, .payload = (void *)spawn_request}};
-
-  return env;
-};
-
-envelope_t *Chakra_stdlib__spawn3(actor_t *actor, void *arg0, void *arg1,
-                                  void *arg2) {
-  actor_id_t self = Chakra_stdlib__self();
-  actor_id_t recipient = {.process = self.process, .entity = 0};
-  void **args = (void **)malloc(sizeof(void *) * 3);
-  args[0] = arg0;
-  args[1] = arg1;
-  args[2] = arg2;
-  spawn_request_t *spawn_request =
-      (spawn_request_t *)malloc(sizeof(spawn_request_t));
-  *spawn_request = (spawn_request_t){
-      .def = actor, .init_args = NULL, .num_init_args = 3, .spawnee = self};
   envelope_t *env = (envelope_t *)malloc(sizeof(envelope_t));
   *env = (envelope_t){
       .actor_id = recipient,

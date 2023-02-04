@@ -21,9 +21,15 @@ type ASTNode =
         | AbstractNode -> true
         | _ -> false
 
-type TypedASTNode =
-    | TypedBindingNode of TypedAST.TCBinding
-    | TypedExprNode of TypedAST.TCExpr
+    member x.IsScalarLiteral =
+        match x with
+        | ExprNode (ChakraString _) -> true
+        | ExprNode (ChakraNumber _) -> true
+        | _ -> false
+
+// type TypedASTNode =
+//     | TypedBindingNode of TypedAST.TCBinding
+//     | TypedExprNode of TypedAST.TCExpr
 
 type Relation =
     | DependsOn
@@ -46,7 +52,7 @@ and TypeGraph =
       DownRelations: Map<string, (Relation * string) list>
       Annotations: Map<string, Type>
       Types: Set<Type>
-      AnnotatedNodes: Map<string, TypedASTNode>
+      // AnnotatedNodes: Map<string, TypedASTNode>
       CurrentStrategy: int
       Strategies: TargetStrategy list }
 
@@ -112,9 +118,14 @@ let addApplyeeEdge from to' tg =
 let addPatternEdge from to' tg = addEdge from to' (PatternOf) tg
 
 let rec addAnnotation n ty tg =
+    let newType =
+        getNodeType n tg
+        |> Option.bind (fun typ -> Unify.unify ty typ) // If there is a type - unify with incoming
+        |> Option.defaultValue ty
+
     let withNewAnno =
         { tg with
-              Annotations = Map.add n ty tg.Annotations
+              Annotations = Map.add n newType tg.Annotations
               Types = Set.add ty tg.Types
               CurrentStrategy = 0 }
 
@@ -128,16 +139,16 @@ let rec addAnnotation n ty tg =
                 List.tryFind dependsOnParam rels
                 |> Option.map
                     (fun (_, s) ->
-                        // printfn "The var at %s depends on param at %s" n s
+                        printfn "The var at %s depends on param at %s" n s
                         addAnnotation s ty withNewAnno))
         |> Option.defaultValue withNewAnno
     | Some _ -> withNewAnno
     | None -> tg
 
+and getNodeType node { Annotations = annos } = Map.tryFind node annos
 
 let hasNode node { Nodes = nodes } = Map.containsKey node nodes
 
-let getNodeType node { Annotations = annos } = Map.tryFind node annos
 
 let getBindingNode node { Nodes = nodes } =
     Map.tryFind node nodes
@@ -265,6 +276,132 @@ let attemptNextStrategy tg =
             { tg with
                   CurrentStrategy = tg.CurrentStrategy + 1 })
 
+
+//1. Annotate scalar literals
+let annotateScalarLiterals
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    let nodeHasNoConreteType node =
+        Map.tryFind node annos
+        |> Option.filter (fun ty -> match ty with | GenericType _ -> false | _ -> true)
+        |> Option.isSome
+
+    let findScalarNodeWithoutConcreteType nodeKey (node: ASTNode) =
+        node.IsScalarLiteral && (nodeHasNoConreteType nodeKey)
+    
+    nodes
+    |> Map.tryFindKey findScalarNodeWithoutConcreteType
+
+//2. Annotate references to annotated nodes in scope
+let annotateReferencesToAnnotatedNodesInScope
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    // Go through the nodes, if one is annotated, then look for a Reference rel where the other node is unannotated
+    let annotation n = Map.tryFind n annos
+    // Should this be done automatically by addAnnotation?
+    None
+
+//3. Annotate aggregate literals w/ all elements annotated
+let annotateAggregateLiteralsWAllElementsAnnotated
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    // let isAggregateLiteralWithAnnotatedElements node =
+    //     match node with
+    //     | ExprNode (ChakraTuple items) -> true
+    //     | ExprNode (ChakraStruct (fields, isOpen)) -> true
+    //     | ExprNode () b ->
+    None
+
+//4. Annotate patterns
+let rec annotatePatterns
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    None
+
+//5. Annotate match heads w/ all Patterns annotated
+let annotateMatchHeadsWAllPatternsAnnotated
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    None
+
+//6. Annotate nodes with References or Sames that are annotated
+let annotateNodesWithReferencesOrSamesThatAreAnnotated
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    None
+
+//7. Annotate aggregate elements w/ aggregate annotated
+let annotateAggregateElementsWAggregateAnnotated
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    None
+
+//8. Annotate apply with all Args annotated
+let annotateApplyWithAllArgsAnnotated
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    None
+
+//9. Annotate match with all Clauses annotated
+let annotateMatchWithAllClausesAnnotated
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    None
+
+//10. Annotate binding node with Params and Return Annotated
+let annotateBindingNodeWithParamsAndReturnAnnotated
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    None
+
+//11. Annotate recursive references with referenced binding node annotated
+let annotateRecursiveReferencesWithReferencedBindingNodeAnnotated
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    None
+
+//12. Annotate args of apply with annotated applyee
+let annotateArgsOfApplyWithAnnotatedApplyee
+    ({ Nodes = nodes
+       UpRelations = uprels
+       DownRelations = downrels
+       Annotations = annos })
+    =
+    None
+
 let primaryTarget
     ({ Nodes = nodes
        UpRelations = uprels
@@ -331,7 +468,7 @@ let unannotatedParamDep
 
 /// Finds the next node that can be annotated following a progression of different strategies.
 let rec findAnnotationTarget tg =
-    // printfn "Attempting to find annotation target with strategy %i" tg.CurrentStrategy
+    printfn "Attempting to find annotation target with strategy %i" tg.CurrentStrategy
 
     match (List.item tg.CurrentStrategy tg.Strategies) tg with
     | Some node -> Some node
@@ -346,13 +483,22 @@ let findAnnotationLeaf
     { UpRelations = rels
       Annotations = annos }
     =
+    printfn "Finding annotation leaf"
     Map.tryFindKey
         (fun k (v: (Relation * string) list) ->
             let annotated =
                 List.filter (fun (r, s) -> (Map.containsKey s annos)) v
 
-            annotated.Length = v.Length
-            && (not (Map.containsKey k annos)))
+            let unannotated =
+                List.filter (fun (r, s) -> not (Map.containsKey s annos)) v
+
+            let allRelationsAnnotated = annotated.Length = v.Length
+            let keyNotFoundInAnnotations = not (Map.containsKey k annos)
+
+            printfn $"Key %s{k}: All relations annotated? %b{allRelationsAnnotated}, Key found in annos? %b{not keyNotFoundInAnnotations}"
+            if not allRelationsAnnotated then
+                printfn "Unannotated nodes\n----\n%O" (List.map (snd) unannotated |> String.concat "\n")
+            allRelationsAnnotated && keyNotFoundInAnnotations)
         rels
 
 let empty =
@@ -361,7 +507,7 @@ let empty =
       DownRelations = Map.empty
       Annotations = Map.empty
       Types = Set.empty
-      AnnotatedNodes = Map.empty
+      // AnnotatedNodes = Map.empty
       CurrentStrategy = 0
       Strategies =
           [ primaryTarget
@@ -375,9 +521,14 @@ let equal tg1 tg2 =
     |> (&&) (tg1.DownRelations = tg2.DownRelations)
     |> (&&) (tg1.Annotations = tg2.Annotations)
     |> (&&) (tg1.Types = tg2.Types)
-    |> (&&) (tg1.AnnotatedNodes = tg2.AnnotatedNodes)
+    // |> (&&) (tg1.AnnotatedNodes = tg2.AnnotatedNodes)
     |> (&&) (tg1.CurrentStrategy = tg2.CurrentStrategy)
+
+
+
 (* Display *)
+
+
 
 let private mermaidClasses = "
 classDef binding fill:#009, color:#fff, stroke: white, stroke-width: 4px
@@ -422,7 +573,7 @@ let private mermaidNode (id, node) =
             ((firstNChars (Pretty.pretty 30 (Pretty.showPattern p)) 20)
                 .Replace("\"", "&ldquo;"))
 
-let rec private mermaidPrintType typ =
+let rec mermaidPrintType typ =
     match typ with
     | UnionType types ->
         sprintf
@@ -451,7 +602,7 @@ let rec private mermaidPrintType typ =
         |> String.concat ", "
         |> sprintf "( %s )"
 
-    | StructType (fields, isOpen, tag) ->
+    | StructType (fields, isOpen) ->
         sprintf
             "%%( %s %s )"
             (fields
@@ -488,6 +639,7 @@ let private mermaidCleanType (ty: string) =
     |> r "->" "ARROW"
     |> r "<" "LEFTANGLE"
     |> r ">" "RIGHTANGLE"
+    |> r "|" "ORBAR"
     |> r "!" "BANG"
     |> r "@" "AT"
     |> r "=" "EQUAL"
@@ -496,6 +648,28 @@ let private mermaidCleanType (ty: string) =
     |> r "," "COMMA"
     |> r " " ""
     |> r "?" "QUESTION"
+
+let mermaidUncleanType (ty: string): string =
+    let r (a: string) (b: string) (s: string) = s.Replace(a, b)
+
+    ty
+    |> r "LEFTPAREN" "( "
+    |> r "RIGHTPAREN" " )"
+    |> r "LEFTBRACKET" "[ "
+    |> r "RIGHTBRACKET" " ]"
+    |> r "LEFTBRACE" "{ "
+    |> r "ENDBRACE" " }"
+    |> r "ARROW" " -> "
+    |> r "LEFTANGLE" "< "
+    |> r "RIGHTANGLE" " >"
+    |> r "ORBAR" "|"
+    |> r "BANG" "!"
+    |> r "AT" "@"
+    |> r "EQUAL" " = "
+    |> r "AMP" " & "
+    |> r "PERCENT" "%"
+    |> r "COMMA" ", "
+    |> r "QUESTION" "?"
 
 let private mermaidType (ty: TypeSystem.Type) =
     let typ = mermaidPrintType ty

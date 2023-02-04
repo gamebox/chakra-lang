@@ -90,7 +90,6 @@ let rec populatePattern name (patt: AST.ChakraPattern) graph =
         |> TypeGraph.addAnnotation name (TypeSystem.NumberType)
     | AST.CPString _ -> graph'
     | AST.CPStruct _ -> graph'
-    | AST.CPSymbol _ -> graph'
     | AST.CPTuple _ -> graph'
 
 let populateStructAccess from root path graph =
@@ -120,6 +119,7 @@ let populateStructTypeFields parent fields graph =
     List.fold
         (fun acc (n, ty) ->
             let id = structFieldId parent n
+            printfn $"Struct %s{parent}: Adding field \"%s{n}\" as \"%s{id}\" with type %O{ty}"
 
             TypeGraph.addAbstractNode id acc
             |> TypeGraph.addAnnotation id ty)
@@ -130,11 +130,12 @@ let populateImport (envs: Map<string, TypedAST.TCModule>) tg (imp: AST.ChakraImp
     match imp with
     | AST.ChakraLocalImport info -> tg
     | AST.ChakraPackageImport info ->
+        // printfn $"Package Name: %s{info.PackageName} %O{envs}"
         let exmap =
             (Map.find info.PackageName envs).ExportMap
             |> Map.toList
 
-        let exType = TypeSystem.strct (exmap, false, None)
+        let exType = TypeSystem.strct (exmap, false)
 
         match info.Typ with
         | AST.ChakraSimpleImportBinding s ->
@@ -145,13 +146,14 @@ let populateImport (envs: Map<string, TypedAST.TCModule>) tg (imp: AST.ChakraImp
 
             List.fold
                 (fun graph (foreign, local) ->
+                    // printfn $"Foreign Name: %s{foreign} %O{fmap}"
                     let ty = Map.find foreign fmap
 
                     TypeGraph.addImportNode local graph
                     |> TypeGraph.addAnnotation local ty
                     |> (fun g ->
                         match ty with
-                        | TypeSystem.StructType (fields, _, _) -> populateStructTypeFields local fields g
+                        | TypeSystem.StructType (fields, _) -> populateStructTypeFields local fields g
                         | _ -> g))
                 tg
                 (Map.toList p)
@@ -163,7 +165,6 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
     match expr with
     | AST.ChakraNumber (_, _) -> TypeGraph.addAnnotation n TypeSystem.num tg'
     | AST.ChakraString (_, _) -> TypeGraph.addAnnotation n TypeSystem.str tg'
-    | AST.ChakraSymbol (_, s) -> TypeGraph.addAnnotation n (TypeSystem.SymbolType s) tg'
     | AST.ChakraVar (_, (var, None)) ->
         match findNodeForVar var n tg' with
         | Some node -> TypeGraph.addDependentEdge n node tg'
@@ -234,11 +235,22 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
 
         addFields tg' |> addSpread
     | AST.ChakraApplyExpr (span, app) ->
+        printfn $"%O{app}"
         let addApplyeeEdge (root, path) graph =
-            // printfn "Looking for apply"
+            printfn "Looking for apply"
             findNodeForVar root n tg'
-            |> Option.map (fun node -> TypeGraph.addApplyeeEdge n (structAccessId node path) graph)
-            |> Option.defaultWith (fun _ -> graph)
+            |> Option.map (fun node ->
+                printfn $"Found Node %s{node}"
+                let strct = (structAccessId node path)
+                (strct, TypeGraph.addApplyeeEdge n strct graph))
+            |> Option.map (fun (node, graph) ->
+                printfn $"$$$$$$ Looking for type of node %s{node}"
+                TypeGraph.getNodeType node graph
+                |> Option.map (fun ty ->
+                    printfn $"$$$$$$ Found type %s{TypeSystem.print ty}"
+                    TypeGraph.addAnnotation n ty graph)
+                |> Option.defaultValue graph)
+            |> Option.defaultValue graph
 
         match app with
         | AST.ChakraNamedApply (id, pairs) ->
@@ -263,12 +275,14 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
                         |> TypeGraph.addArgumentEdge n (joinIds argId "$") i)
                     graph
                     (withIndex exprs)
+            let (node, path) = id
 
-            addApplyeeEdge id tg' |> addArgs
+            addApplyeeEdge id tg'
+            |> addArgs
     | AST.ChakraLambda (_, l) ->
         let withParamNodes graph =
             List.fold
-                (fun acc (i, p) ->
+                (fun acc (i, (p, ty)) ->
                     let id = joinIds n p
 
                     let ty =
@@ -278,7 +292,7 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
                     |> TypeGraph.addParameterEdge n id i
                     |> TypeGraph.addAnnotation id ty)
                 graph
-                (List.mapi (fun i a -> (i, a)) l.Args)
+                (List.indexed l.Args)
 
         withParamNodes tg'
         |> populateExprList n l.Body
@@ -299,6 +313,7 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
         |> List.fold linkPipeSegments tg''
 
     | AST.ChakraMatchExpr (_, (AST.ChakraMatch (expr, clauses))) ->
+        let headId = matchHeadId n
         let populateMatchClause graph (i, (AST.ChakraMatchClause (patt, exprList))) =
             let clauseId = matchClauseELId n i
             let pattId = matchClausePatternId n i
@@ -309,12 +324,31 @@ let rec populateExpr bname (expr: AST.ChakraExpr) tg =
             |> TypeGraph.addPatternEdge n pattId
 
         let tg'' =
-            populateExpr (matchHeadId n) expr tg'
-            |> TypeGraph.addDependentEdge n (exprId (matchHeadId n))
+            populateExpr headId expr tg'
+            |> TypeGraph.addDependentEdge n (exprId headId)
 
-        clauses
-        |> withIndex
+        let indexedClauses = withIndex clauses
+
+        let annotateHead tg =
+            let annotateWithClausePattern (graph: TypeGraph.TypeGraph) (i, (AST.ChakraMatchClause (patt, exprList))) =
+                let pattId = matchClausePatternId n i
+
+                let addAnnotationToHead ty =
+                    printfn $"Clause %s{pattId} will annotate head %s{exprId headId} with type: %s{TypeGraph.mermaidPrintType ty}"
+                    TypeGraph.addAnnotation (exprId headId) ty graph
+                
+                TypeGraph.getNodeType pattId graph
+                |> Option.map addAnnotationToHead
+                |> Option.defaultValue graph
+
+            indexedClauses
+            |> List.fold (annotateWithClausePattern) tg
+            // Get pattern types and add them as annotations of the match head
+
+
+        indexedClauses
         |> List.fold (populateMatchClause) tg''
+        |> annotateHead
     | AST.ChakraNativeExpr _ -> tg'
 
 and populateExprList bname (AST.ChakraExprList (bs, expr)) tg =
@@ -335,7 +369,7 @@ and populateBinding bname tg ((b: AST.ChakraBinding), i) =
 
         let withParamNodes graph =
             List.fold
-                (fun acc (i, p) ->
+                (fun acc (i, (p, ty)) ->
                     let id = joinIds n p
 
                     let ty =
@@ -439,6 +473,7 @@ let pushTypeToDependentEdge source ty graph =
             |> Option.orElseWith (fun _ -> TypeGraph.addAnnotation def ty graph |> Some))
 
 let rec annotateExpr graph node expr =
+    printfn $"Annotating expr %s{node}:\n%O{expr}"
     match expr with
     | AST.ChakraVar (_, (s, path)) ->
         // printfn "Annotating var %s at %s" s node
@@ -518,7 +553,7 @@ let rec annotateExpr graph node expr =
             |> Option.defaultValue acc
 
         let tys = List.fold getItemsTypes [] fields
-        TypeGraph.addAnnotation node (TypeSystem.strct (tys, false, None)) graph
+        TypeGraph.addAnnotation node (TypeSystem.strct (tys, false)) graph
     | AST.ChakraApplyExpr (_, app) ->
         let annotateApply annotateArgsFn fetchArgsFn graph =
             TypeGraph.getApplyee node graph
@@ -579,6 +614,7 @@ let rec annotateExpr graph node expr =
             annotateApply annotate fetch graph
     | AST.ChakraLambda (_, l) -> annotateFunctionLike node l.Args graph
     | AST.ChakraMatchExpr (_, (AST.ChakraMatch (expr, clauses))) ->
+        printfn "Annotating match expr"
         let getItemsTypes (acc: TypeSystem.Type list) ((i: int), _) =
 
             TypeGraph.getNodeType (exprId (matchClauseELId node i)) graph
@@ -589,11 +625,7 @@ let rec annotateExpr graph node expr =
             List.fold getItemsTypes [] (withIndex clauses)
             |> Set
 
-        if tys.Count = 1 then
-            TypeGraph.addAnnotation node tys.MaximumElement graph
-        else
-            // printfn "The list at %s had %i types" node tys.Count
-            graph
+        Set.fold (fun g ty -> TypeGraph.addAnnotation node ty g) graph tys
     | _ ->
         // printfn "Annotating expr\n~~~~~~~~~~\n%s\n~~~~~~~~~~~" (Pretty.pretty 80 (Pretty.showExpr expr))
         graph
@@ -616,7 +648,7 @@ let annotateLeaf node graph =
                     (fieldName, ty))
                 fs
 
-        TypeGraph.addAnnotation node (TypeSystem.strct (fields, false, None)) graph
+        TypeGraph.addAnnotation node (TypeSystem.strct (fields, false)) graph
 
 let walkAndAnnotate tg =
     let rec walk graph =
@@ -637,15 +669,15 @@ let walkAndAnnotate tg =
             if TypeGraph.equal graph graph' then
                 match TypeGraph.attemptNextStrategy graph with
                 | Some graph' -> walk graph'
-                | None -> inspect "Typegraph" graph
+                | None -> graph
             else
-                graph' |> inspect "Typegraph" |> walk
+                graph' |> walk
 
         | None ->
-            // printfn "No more annotation targets - looking for unannotated leaves"
+            printfn "No more annotation targets - looking for unannotated leaves"
             match TypeGraph.attemptNextStrategy graph with
             | Some graph' -> walk graph'
-            | None -> inspect "Typegraph" graph
+            | None -> graph
 
     walk tg |> Ok
 
@@ -665,15 +697,15 @@ let lowerPattern id (patt: AST.ChakraPattern) graph : TypedAST.TCPattern =
 let rec lowerExpr i (expr: AST.ChakraExpr) graph : TypedAST.TCExpr =
     let id = exprId i
 
-    let ty () =
-        TypeGraph.getNodeType id graph |> Option.get
+    let ty (): TypeSystem.Type =
+        TypeGraph.getNodeType id graph
+        |> Option.defaultValue (TypeSystem.gen "?")
 
     // printfn "Expr ID is '%s' and the expr is:\n%O" id expr
 
     match expr with
     | AST.ChakraVar (loc, id) -> TypedAST.TCVar(id, (ty ()))
     | AST.ChakraNumber (_, d) -> TypedAST.TCNumber d
-    | AST.ChakraSymbol (_, s) -> TypedAST.TCSymbol s
     | AST.ChakraString (_, s) -> TypedAST.TCString s
     | AST.ChakraTuple (_, exprs) ->
         let es =
@@ -721,7 +753,8 @@ let rec lowerExpr i (expr: AST.ChakraExpr) graph : TypedAST.TCExpr =
             TypedAST.TCMatch(lowerExpr id expr graph, ty (), clauses)
 
         TypedAST.TCMatchExpr(span, mTy)
-    | AST.ChakraPipeExpr pipe -> raise (System.Exception())
+    | AST.ChakraPipeExpr { Head = h; Tail = t} ->
+        lowerExpr id h graph
     | AST.ChakraNativeExpr _ -> raise (System.Exception())
 
 and lowerExprList id (AST.ChakraExprList (bs, expr)) graph : TypedAST.TCExprList =
@@ -749,12 +782,14 @@ and lowerBinding id (b: AST.ChakraBinding) graph : TypedAST.TCBinding =
 
         let args =
             List.map
-                (fun arg ->
+                (fun (arg, ty) ->
                     let id = joinIds id arg
                     // printfn "Arg is %s" arg
 
                     let ty =
-                        TypeGraph.getNodeType id graph |> Option.get
+                        TypeGraph.getNodeType id graph
+                        |> Option.defaultWith
+                            (fun _ -> TypeSystem.gen "?")
 
                     (arg, ty))
                 patt.Args
@@ -771,10 +806,14 @@ and lowerBindings id bindings graph : TypedAST.TCBinding list =
 
 
 let lowerIntoTypedAst (m: AST.ChakraModule) (tg: TypeGraph.TypeGraph) =
+    printfn "Annos\n-------"
+    for anno in tg.Annotations do
+        printfn "%s -> %s" anno.Key (TypeSystem.print anno.Value)
     let optToResult n opt =
         match opt with
         | Some v -> Ok v
-        | None -> Error(TypeError.UntypedError n)
+        | None ->
+            Error(TypeError.UntypedError n)
 
     let collectExportBindingTypes acc (b: AST.ChakraBinding) =
         match acc with
@@ -793,7 +832,6 @@ let lowerIntoTypedAst (m: AST.ChakraModule) (tg: TypeGraph.TypeGraph) =
 
     let createTypedExports bindings =
         List.fold collectExportBindingTypes (Ok Map.empty) bindings
-
 
     createTypedExports m.Bindings
     |> Result.map (fun es -> (es, (lowerBindings "" m.Bindings tg)))

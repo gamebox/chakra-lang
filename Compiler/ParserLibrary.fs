@@ -26,7 +26,7 @@ type ParserResult<'a> =
 
 let toResult parserResult =
     match parserResult with
-    | Success a -> Ok a
+    | Success a -> Ok(a)
     | Failure (label, err, p) -> Error(label, err, p)
 
 type Position = { Line: int; Column: int }

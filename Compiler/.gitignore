@@ -3,3 +3,4 @@
 *.chromium.json
 *.speedscope.json
 *.nettrace
+.fake

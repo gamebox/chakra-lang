@@ -5,7 +5,8 @@
 module Pretty
 
 open AST
-open ChakraParser
+open FParsec
+open ChakraFparsec
 open System.Text.RegularExpressions
 
 (*
@@ -99,8 +100,7 @@ let copy i x = List.map (fun _ -> x) [ 1 .. i ]
     be w k ((i,NEST j x):z) = be w k ((i+j,x):z)
     be w k ((i,TEXT s):z) = s ‘Text‘ be w (k+length s) z
     be w k ((i,LINE):z) = i ‘Line‘ be w i z
-    be w k ((i,x :<|> y):z) = better w k (be w k ((i,x):z))
-    (be w k ((i,y):z))
+    be w k ((i,x :<|> y):z) = better w k (be w k ((i,x):z)) (be w k ((i,y):z))
 *)
 
 let rec be w k ops =
@@ -222,7 +222,6 @@ let rec shouldStayOnOneLine expr nestingLevel =
     | ChakraVar (s, path) -> true
     | ChakraNumber _ -> true
     | ChakraString (_, s) -> s.Length < 15
-    | ChakraSymbol (_, s) -> s.Length < 15
     | ChakraLambda _ -> false
     | ChakraTuple (_, items) ->
         items.Length <= 1
@@ -251,7 +250,6 @@ let rec showPattern (patt: ChakraPattern) =
     | CPIgnore _ -> text "_"
     | CPVar (_, s) -> text (sprintf "%s" s)
     | CPNumber (_, f) -> text (sprintf "%M" f)
-    | CPSymbol (_, s) -> text (sprintf "#%s" s)
     | CPString (_, s) -> text (sprintf "\"%s\"" s)
     | CPTuple (_, items) ->
         match items with
@@ -367,6 +365,7 @@ let rec showModule (mod': ChakraModule) =
     <&> line
     <&> line
     <&> block 0 (List.map (opWithNewline << showBinding) mod'.Bindings)
+    <&> group (line <&> (text ""))
 
 and showMatchClause (ChakraMatchClause (lit, exprList)) = TextOp "ChakraMatchClause"
 
@@ -426,7 +425,6 @@ and showExpr (expr: ChakraExpr) =
     match expr with
     | ChakraVar (_, id) -> text (createFullId id)
     | ChakraNumber (_, num) -> text (sprintf "%M" num)
-    | ChakraSymbol (_, s) -> text (sprintf "#%s" s)
     | ChakraString (_, s) -> text (sprintf "\"%s\"" s)
     | ChakraTuple (_, []) -> text "()"
     | ChakraTuple (_, [ item ]) ->
@@ -530,7 +528,7 @@ and showExpr (expr: ChakraExpr) =
             <&> text "]"
     | ChakraLambda (span, l) ->
         let argsOp =
-            List.reduce (<&>) (List.map (opWithComma << text) l.Args)
+            List.reduce (<&>) (List.map (opWithComma << text) (List.map fst l.Args))
 
         text "{ ("
         <&> argsOp
@@ -560,7 +558,7 @@ and showExprList (ChakraExprList (bs, expr)) =
 and showBindingPattern (patt: ChakraBindingPattern) =
     match patt with
     | ChakraSimpleBindingPattern name -> TextOp(sprintf "%s =" name)
-    | ChakraFunctionBindingPattern { Name = n; Args = a } -> TextOp(sprintf "%s(%s) =" n (String.concat ", " a))
+    | ChakraFunctionBindingPattern { Name = n; Args = a } -> TextOp(sprintf "%s(%s) =" n (String.concat ", " (List.map fst a)))
     | ChakraComplexBindingPattern patt -> (showPattern patt) <+> text "="
 
 and showBinding
@@ -665,8 +663,8 @@ let format path =
     let lines = System.IO.File.ReadAllLines(path)
 
     let parseResult =
-        ParserLibrary.run (chakraModule "Test") (String.concat "\n" lines)
+        run (chakraModule "Test") (String.concat "\n" lines)
 
     match parseResult with
-    | ParserLibrary.Success (p, _) -> printfn "%s" (pretty 80 (showModule p))
-    | _ -> ParserLibrary.printResult parseResult
+    | Success (p, _, _) -> printfn "%s" (pretty 80 (showModule p))
+    | Failure (error, _, _) -> printfn "%s" error
