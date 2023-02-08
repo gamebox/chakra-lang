@@ -1,31 +1,52 @@
-# This is a comment?
+ifeq (${DOTNET_VERSION},) 
+	DOTNET_VERSION=net60
+endif
+ifeq (${COMPILER_CONFIGURATION},) 
+	COMPILER_CONFIGURATION=Release
+endif
+ifeq (${RID},) 
+	RID=osx.12-arm64
+endif
+ifeq (${DEST},) 
+	DEST=/usr/local/bin
+endif
+COMPILER_PROJECT_FILE=Compiler/Parser.fsproj
+COMPILER_SOURCES=$(shell ls Compiler/*.fs)
+COMPILER_EXE=Compiler/bin/${COMPILER_CONFIGURATION}/${DOTNET_VERSION}/${RID}/publish/Parser
+INSTALL_EXE=${DEST}/chakra
 
-override COMPILER_SOURCES := $(ls Compiler/**/.fs)
-override COMPILER_PROJECT_FILE=Compiler/Parser.fsproj
-COMPILER_CONFIGURATION=Release
-COMPILER_EXE=Compiler/bin/${COMPILER_CONFIGURATION}/netcoreapp3.1/Parser
+EXECUTABLE=target/chakra
 
-RUNTIME_SOURCES=$(ls Runtime/**/*.{c,h})
-RUNTIME_ARTIFACTS=$(ls Runtime/*.{o,a,s,ll,out})
+RUNTIME_SOURCES=$(shell ls Runtime/**/*.{c,h})
+RUNTIME_ARTIFACTS=$(shell ls Runtime/*.{o,a,s,ll,out,h.gch})
 RUNTIME_EXECUTABLE=Runtime/runtime.o
 
+all: target ${EXECUTABLE} ${RUNTIME_EXECUTABLE}
+	@echo "* Building chakra executable and runtime"
+
+target:
+	@echo "* Creating target directory"
+	mkdir -p target
+
+${EXECUTABLE}: ${COMPILER_EXE}
+	@echo "* Moving" ${EXECUTABLE}
+	mkdir -p target
+	cp ${COMPILER_EXE} ${EXECUTABLE}
 
 ${COMPILER_EXE}: ${COMPILER_SOURCES} ${COMPILER_PROJECT_FILE}
-	@echo "Building compiler"
-	dotnet build ${COMPILER_PROJECT_FILE} -c ${COMPILER_CONFIGURATION} -nologo
-
-compiler_install: ${COMPILER_EXE}
-	mkdir -p target
-	cp ${COMPILER_EXE} target/chakra
+	@echo "* Building" $@
+	dotnet publish ${COMPILER_PROJECT_FILE} -r ${RID} -c ${COMPILER_CONFIGURATION} -nologo
 
 .PHONY:
 
-compiler_clean: .PHONY
-	rm ${COMPILER_EXE}
+clean: .PHONY
+	rm -f ${COMPILER_EXE} ${RUNTIME_ARTIFACTS} ${RUNTIME_EXECUTABLE} ${EXECUTABLE} ${INSTALL_EXE} 2&> /dev/null
 
-runtime: ${RUNTIME_EXECUTABLE}
-	@echo "BUILDING RUNTIME USING SOURCES: ${RUNTIME_SOURCES}"
-	clang -c -gdwarf ${RUNTIME_SOURCES} -o Runtime/runtime.o
+${RUNTIME_EXECUTABLE}: ${RUNTIME_SOURCES}
+	@echo "* Building" $@
+	clang -c -gdwarf ${RUNTIME_SOURCES}
 
-runtime_clean: .PHONY
-	rm ${RUNTIME_ARTIFACTS}
+install: ${INSTALL_EXE}
+
+${INSTALL_EXE}: ${EXECUTABLE}
+	cp ${EXECUTABLE} ${INSTALL_EXE}

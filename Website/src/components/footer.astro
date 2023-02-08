@@ -1,0 +1,46 @@
+---
+import { Icon } from "astro-icon";
+import HeroImage from "~/components/hero-image.astro";
+import type { FooterLink } from "~/types";
+
+const links: Array<FooterLink> = [
+  {
+    url: "https://chakra-lang.dev/",
+    description: "Chakra's official website",
+    icon: "mdi:home",
+  },
+  {
+    url: "https://github.com/gamebox/chakra-lang",
+    description: "View source on GitHub",
+    icon: "fa-brands:github-alt",
+  },
+  // {
+  //   url: "https://astro.build/chat",
+  //   description: "Astro on Discord",
+  //   icon: "fa-brands:discord",
+  // },
+  {
+    url: "https://twitter.com/anthonybullard",
+    description: "The maintainer on Twitter",
+    icon: "fa-brands:twitter",
+  },
+];
+---
+
+<footer class="relative flex h-32 items-center justify-center">
+  <ul class="relative grid grid-cols-3 gap-4 sm:grid-cols-3">
+    {
+      links.map((link) => (
+        <li>
+          <a
+            class="flex h-16 w-16 items-center justify-center p-4"
+            href={link.url}
+          >
+            <span class="sr-only">{link.description}</span>
+            <Icon class="h-full" name={link.icon} />
+          </a>
+        </li>
+      ))
+    }
+  </ul>
+</footer>

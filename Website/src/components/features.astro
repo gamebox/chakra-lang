@@ -1,0 +1,64 @@
+---
+import { Icon } from "astro-icon";
+import ContentSection from "~/components/content-section.astro";
+import type { FeatureItem } from "~/types";
+
+const features: Array<FeatureItem> = [
+  {
+    title: "100% type inference",
+    description:
+      "The whole application is typed with no annotations on your part.  Just create the types you need, and Chakra does the rest.",
+    icon: "mdi:done",
+  },
+  {
+    title: "Managed Effects",
+    description:
+      "All side-effects are handled by a lightweight runtime, making your code easier to reason about.",
+    icon: "mdi:lock",
+  },
+  {
+    title: "Native performance",
+    description:
+      "Chakra is compiled down to highly-optimized machine code for every supported platform through LLVM",
+    icon: "mdi:speedometer",
+  },
+  {
+    title: "Simple syntax",
+    description:
+      "With very few syntactic constructs, no keywords, and a small set of special characters, Chakra is incredibly readable even to beginners",
+    icon: "mdi:abc",
+  },
+  {
+    title: "Memory safe",
+    description:
+      "Chakra uses turn-based automatic reference counting to ensure that all memory references are live, while providing consistent performance.",
+    icon: "mdi:memory",
+  },
+  {
+    title: "Capability secure",
+    description:
+      "All system resources are protected by explicit capability delegation. You decide what third-party code has access to.",
+    icon: "mdi:badge",
+  },
+];
+---
+
+<ContentSection title="Features" id="features">
+  <Fragment slot="lead">
+    Chakra comes with <span class="text-primary">powerful abstractions</span> based on
+    the best parts of <span class="text-primary">pure FP</span> and the <span class="text-primary">Actor model</span>. All while being <span class="text-primary">boilerplate-free</span>.
+  </Fragment>
+  <ul class="grid max-w-6xl grid-cols-1 gap-1 md:grid-cols-2 lg:grid-cols-3">
+    {
+      features.map(({ title, description, icon }) => (
+        <li class="flex flex-col items-center gap-4 bg-offset p-6">
+          <div class="h-16 w-16 p-3">
+            <Icon name={icon} />
+          </div>
+          <p class="text-center font-extrabold text-xl">{title}</p>
+          <p class="text-center text-offset text-sm">{description}</p>
+        </li>
+      ))
+    }
+  </ul>
+</ContentSection>

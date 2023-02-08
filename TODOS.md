@@ -10,17 +10,16 @@
 
 ## New Setup
 
-Compiler/
-Runtime/
-Builtins/
-Extensions/
-Examples/
-Docs/
-Website/
-Scripts/
-README.md
-CHANGELOG.md
-TODOS.md
-ARCHITECTURE.md
-Makefile
-.gitignore
+- [ ] Builtins/
+- [x] Compiler/
+- [x] Docs/
+- [x] Examples/
+- [x] Extensions/
+- [x] Runtime/
+- [ ] Scripts/
+- [ ] Website/
+- [x] README.md
+- [ ] CHANGELOG.md
+- [ ] ARCHITECTURE.md
+- [x] Makefile
+- [x] .gitignore

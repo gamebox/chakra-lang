@@ -1,0 +1,22 @@
+---
+import { Icon } from "astro-icon";
+import ContentSection from "~/components/content-section.astro";
+---
+
+<ContentSection title="Pure Concurrency" id="intro">
+  <Fragment slot="lead">
+    Chakra is a programming language for the
+    <span class="text-primary">future</span>, and today.
+    <span class="text-primary">Lightning-fast</span>
+    concurrency meets <span class="text-primary">pure</span> functional programming.
+  </Fragment>
+  <div class="grid grid-cols-1 gap-2 sm:grid-cols-1">
+    <a
+      href="/docs"
+      class="flex items-center justify-center gap-3 border-2 border-current px-6 py-4"
+    >
+      <Icon pack="mdi" name="telescope" class="h-8" />
+      <span>Read the docs</span>
+    </a>
+  </div>
+</ContentSection>

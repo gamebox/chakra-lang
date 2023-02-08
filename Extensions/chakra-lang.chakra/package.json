@@ -9,13 +9,20 @@
     "categories": [
         "Programming Languages"
     ],
+    "repository": {
+        "type": "git",
+        "url": "https://www.github.com/gamebox/chakra-lang",
+        "directory": "Extensions/chakra-lang.chakra"
+    },
+    "icon": "./logo-128.png",
     "publisher": "chakra-lang",
     "contributes": {
         "languages": [{
             "id": "chakra",
             "aliases": ["CHAKRA", "chakra"],
             "extensions": [".chakra"],
-            "configuration": "./language-configuration.json"
+            "configuration": "./language-configuration.json",
+            "icon": {"dark": "./logo.svg", "light": "./logo.svg"}
         }],
         "grammars": [
             {

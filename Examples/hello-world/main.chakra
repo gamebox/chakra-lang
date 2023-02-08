@@ -1,0 +1,13 @@
+= %(
+    main,
+)
+
+%( io ) = /stdlib
+
+%( print ) = io
+
+main = Task(init)
+
+init(caps) =
+    %( stdio ) = caps
+    print(stdio, "Hello world!")

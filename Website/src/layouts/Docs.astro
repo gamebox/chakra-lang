@@ -1,0 +1,49 @@
+---
+import { getCollection, CollectionEntry } from "astro:content";
+import Footer from "~/components/footer.astro";
+import Header from "~/components/header.astro";
+import Layout from "./Layout.astro";
+
+type Categories = CollectionEntry<"docs">["data"]["category"];
+
+const docsByCategory = (await getCollection('docs')).reduce((acc, entry) => {
+    const entries = acc[entry.data.category] ?? [];
+    return {
+        ...acc,
+        [entry.data.category]: [...entries, entry] 
+    };
+}, {} as Record<Categories, Array<CollectionEntry<"docs">>>);
+
+export interface Props {
+    category?: CollectionEntry<"docs">["data"]["category"];
+    title: string;
+    slug: string;
+}
+
+const { category: cat, title, slug: currentSlug } = Astro.props;
+---
+<Layout title={title}>
+    <Header homePage={false}></Header>
+    <div class="px-8 mt-20 grid grid-cols-[1fr_minmax(400px,_max-content)] min-h-screen">
+        <div class="prose dark:prose-invert">
+            <slot />
+        </div>
+        <div class="ml-4 mr-4">
+            {(Object.keys(docsByCategory) as Categories[]).map(category => {
+                return (
+                    <>
+                    <a href={`/docs/${docsByCategory[category][0].slug}`} class="block focus:decoration-transparent focus:outline-none">{category}</a>
+                    {!cat || category === cat ? <ul class="pl-4 border-l-pink-500 border-l-2 border-opacity-60">
+                        {docsByCategory[category].map(entry => {
+                            return (
+                                <li class={`text-sm ${currentSlug === entry.slug ? 'text-primary' : ''}`}><a href={`/docs/${entry.slug}`}>{entry.data.title}</a></li>
+                            );
+                        })}
+                    </ul> : null}
+                    </>
+                )
+            })}
+        </div>
+    </div>
+    <Footer></Footer>
+</Layout>
