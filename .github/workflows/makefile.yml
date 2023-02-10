@@ -22,9 +22,6 @@ jobs:
       with:
         version: latest
 
-    - name: configure
-      run: ./configure
-
     - name: Install dependencies
       run: RID=linux-x64 make
 
