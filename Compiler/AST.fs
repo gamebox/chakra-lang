@@ -144,7 +144,6 @@ and ChakraExprList = ChakraExprList of (ChakraBinding list * ChakraExpr)
 and ChakraExpr =
     | ChakraVar of Span * (string * (string list) option)
     | ChakraNumber of Span * Decimal
-    | ChakraConsExpr of Span * ((string * (string list)) * ChakraExpr list)
     | ChakraString of Span * string
     | ChakraTuple of Span * ChakraExpr list
     | ChakraStruct of Span * ChakraStruct

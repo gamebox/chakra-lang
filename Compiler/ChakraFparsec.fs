@@ -408,7 +408,7 @@ let pCList item =
         <?> "non empty list"
         <!> "non empty list"
 
-    (nonEmptyList <|> emptyList)
+    (attempt nonEmptyList <|> emptyList)
 
 let chakraList =
     let createList (span, (items, spread)) =
@@ -988,11 +988,11 @@ let chakraMetdata =
         <?> "Metadata binding"
 
     let meta =
-        rawEqual .>>?spaces1
+        rawEqual .>> spaces1
         >>? structStart
-        >>? sepEndBy1 metadataBinding ((pstring "," .>>?spaces) .>>?deadOrWhitespace)
-        .>>?opt ((pstring "," .>>?spaces) .>>?deadOrWhitespace)
-        .>>?rightParen
+        >>? sepEndBy1 metadataBinding ((pstring "," .>>? spaces) .>>? deadOrWhitespace)
+        .>>? opt ((pstring "," .>>? spaces) .>>? deadOrWhitespace)
+        .>>? rightParen
         |>> Map
         <?> "Metadata file"
 

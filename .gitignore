@@ -272,3 +272,5 @@ Examples/**/.build/*
 
 ### Build artifacts
 a.out
+target
+*.o

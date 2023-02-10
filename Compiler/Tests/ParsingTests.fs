@@ -5,7 +5,10 @@ open ChakraFparsec
 open System
 open System.IO
 
-let loadFixture path = System.IO.File.ReadAllText(Path.Combine([|__SOURCE_DIRECTORY__; "Fixtures"; "parsing"; @$"{path}.chakra"|]))
+let loadFixture path =
+    let p = Path.Combine([|__SOURCE_DIRECTORY__; "Fixtures"; "parsing"; @$"{path}.chakra"|])
+    printfn "Loading %s" p
+    System.IO.File.ReadAllText(p)
 
 let assertThat (bool: bool) (label: string) =
     if not bool then NUnit.Framework.Assert.Fail(label)
@@ -207,3 +210,12 @@ let ``Struct parsing`` () =
 [<NUnit.Framework.Test>]
 let ``Lambda parsing`` () =
     assertThat true ""
+
+
+[<Test>]
+let ``Complex module with every construct parsing`` () =
+    let str = loadFixture "module/everything"
+    let parsed = (FParsec.CharParsers.run (chakraModule "everything")  str)
+    match parsed with
+    | FParsec.CharParsers.ParserResult.Success _ -> ()
+    | _ -> Assert.Fail "Failed to parse: Complex module with every construct parsing"

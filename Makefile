@@ -11,6 +11,7 @@ ifeq (${DEST},)
 	DEST=/usr/local/bin
 endif
 COMPILER_PROJECT_FILE=Compiler/Parser.fsproj
+TEST_PROJECT_FILE=Compiler/Tests/Tests.fsproj
 COMPILER_SOURCES=$(shell ls Compiler/*.fs)
 COMPILER_EXE=Compiler/bin/${COMPILER_CONFIGURATION}/${DOTNET_VERSION}/${RID}/publish/Parser
 INSTALL_EXE=${DEST}/chakra
@@ -35,12 +36,12 @@ ${EXECUTABLE}: ${COMPILER_EXE}
 
 ${COMPILER_EXE}: ${COMPILER_SOURCES} ${COMPILER_PROJECT_FILE}
 	@echo "* Building" $@
-	dotnet publish ${COMPILER_PROJECT_FILE} -r ${RID} -c ${COMPILER_CONFIGURATION} -nologo
+	dotnet publish ${COMPILER_PROJECT_FILE} -r ${RID} -c ${COMPILER_CONFIGURATION} -nologo -p:PublishSingleFile=true --self-contained -p:PublishReadyToRun=true
 
 .PHONY:
 
 clean: .PHONY
-	rm -f ${COMPILER_EXE} ${RUNTIME_ARTIFACTS} ${RUNTIME_EXECUTABLE} ${EXECUTABLE} ${INSTALL_EXE} 2&> /dev/null
+	rm -f ${COMPILER_EXE} ${RUNTIME_ARTIFACTS} ${RUNTIME_EXECUTABLE} ${EXECUTABLE}
 
 ${RUNTIME_EXECUTABLE}: ${RUNTIME_SOURCES}
 	@echo "* Building" $@
@@ -50,3 +51,6 @@ install: ${INSTALL_EXE}
 
 ${INSTALL_EXE}: ${EXECUTABLE}
 	cp ${EXECUTABLE} ${INSTALL_EXE}
+
+compiler_tests: .PHONY
+	dotnet test ${TEST_PROJECT_FILE} -r ${RID} -nologo

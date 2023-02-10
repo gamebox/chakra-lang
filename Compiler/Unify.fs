@@ -280,25 +280,6 @@ let rec W nv gamma exp : int * ((Type * string) list * Type) =
         (nv, ([], StringType))
     | AST.ChakraNumber _ ->
         (nv, ([], NumberType))
-    | AST.ChakraConsExpr (span, (id, args)) ->
-        let (n, path) = id
-        let (_, (_, fnTy)) = W nv gamma (AST.ChakraVar (span, (n, Some path)))
-        match fnTy with
-        | FunctionType (argTys, ret) ->
-            let rec unifyArgs ss nv exprs tys =
-                match (exprs, tys) with
-                | (_ :: _, []) -> raise (Unify Arity)
-                | ([], _ :: _) -> raise (Unify Arity)
-                | ([], []) -> ss
-                | (e :: es, t :: ts) ->
-                    let (nv', (S1, tau1)) = W nv gamma e
-                    let ss' = unify t tau1
-                    unifyArgs (compose ss S1) nv' es ts
-            let ss = unifyArgs [] nv args (List.map (snd) argTys)
-
-            // if args all unify, use subs on ret
-            // return result
-            (0, (ss, ret))
     | AST.ChakraList (_, { Items = items }) ->
         // Infer the type for each expression, then unify the types of each
         let rec itemsubs nv gamma s ty exps =

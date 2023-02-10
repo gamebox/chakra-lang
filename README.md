@@ -5,7 +5,7 @@
 Chakra is a capabilities-secure, purely functional, type- and memory-safe language
 providing fast, simple concurrency with Actors.
 
-<a id="org9c79414"></a>
+Visit the [website](https://chakra-lang.dev) to learn more.
 
 ## Capabilities Secure
 

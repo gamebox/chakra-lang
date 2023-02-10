@@ -14,7 +14,7 @@
         "url": "https://www.github.com/gamebox/chakra-lang",
         "directory": "Extensions/chakra-lang.chakra"
     },
-    "icon": "./logo-128.png",
+    "icon": "logo-128.png",
     "publisher": "chakra-lang",
     "contributes": {
         "languages": [{

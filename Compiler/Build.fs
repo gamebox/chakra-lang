@@ -111,7 +111,10 @@ let parseProjectFiles (Project (name, root, v)) =
 
     let rec collectFiles path : string list =
         if File.GetAttributes path = FileAttributes.Directory then
-            let files = Directory.GetFiles path |> List.ofSeq
+            let files =
+                Directory.GetFiles path 
+                |> Seq.filter (fun filename -> filename.EndsWith(".chakra"))
+                |> List.ofSeq
 
             let dirs =
                 Directory.GetDirectories path |> List.ofSeq
@@ -275,7 +278,10 @@ let build optPath =
         // .>>. linkAndCompile
 
     match buildResult with
-    | Ok _ ->
+    | Ok (ParsedProject (proj, modules)) ->
+        printfn "Project Info: %O" proj
+        printfn "Modules:"
+        Map.iter (printfn "%s:\n%O") modules
         printPhase "DONE" false
         // printfn "Executable can be found at %s" output
     | Error err ->
