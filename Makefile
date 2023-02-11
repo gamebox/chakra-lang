@@ -10,6 +10,7 @@ endif
 ifeq (${DEST},) 
 	DEST=/usr/local/bin
 endif
+BLAH=$(shell echo Runtime/**/*.{c, h})
 COMPILER_PROJECT_FILE=Compiler/Parser.fsproj
 TEST_PROJECT_FILE=Compiler/Tests/Tests.fsproj
 COMPILER_SOURCES=$(shell ls ./Compiler/*.fs)
