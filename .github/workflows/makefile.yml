@@ -25,7 +25,10 @@ jobs:
         version: latest
 
     - name: Build compiler and runtime
-      run: dotnet publish Compiler/Parser.fsproj -r linux-x64 -c Release -nologo -p:PublishSingleFile=true --self-contained -p:PublishReadyToRun=true
+      run: |
+        dotnet publish Compiler/Parser.fsproj -r linux-x64 -c Release -nologo -p:PublishSingleFile=true --self-contained -p:PublishReadyToRun=true
+        mkdir -p target
+	      cp Compiler/bin/Release/net6/linux-64/publish/Parser target/chakra
 
     - name: Run check
       run: dotnet test Compiler/Tests/Tests.fsproj -r linux-x64 -nologo
