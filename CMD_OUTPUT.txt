@@ -1,0 +1,11 @@
+chakra v0.0.1
+
+┌────────────────────────────────────────────────────────────────────────┐
+│                                                                        │
+│ help          Prints this help                                         │
+│ version       Shows version information                                │
+│ build [path]  [TODO] Build an app in the current directory if path is  │
+│               is not specified, or the app in the directory specified. │
+│ format PATH   Formats the Chakra file at PATH                          │
+│                                                                        │
+└────────────────────────────────────────────────────────────────────────┘
