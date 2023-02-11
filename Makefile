@@ -19,13 +19,36 @@ INSTALL_EXE=${DEST}/chakra
 
 EXECUTABLE=target/chakra
 
-RUNTIME_SOURCES=$(shell ls ./Runtime/**/*.{c,h})
+RUNTIME_SOURCES := Runtime/actors.c
+RUNTIME_SOURCES += Runtime/actors.h
+RUNTIME_SOURCES += Runtime/channel.c
+RUNTIME_SOURCES += Runtime/channel.h
+RUNTIME_SOURCES += Runtime/child.c
+RUNTIME_SOURCES += Runtime/child.h
+RUNTIME_SOURCES += Runtime/main.c
+RUNTIME_SOURCES += Runtime/main.h
+RUNTIME_SOURCES += Runtime/process.c
+RUNTIME_SOURCES += Runtime/process.h
+RUNTIME_SOURCES += Runtime/recycler.c
+RUNTIME_SOURCES += Runtime/run_table.c
+RUNTIME_SOURCES += Runtime/run_table.h
+RUNTIME_SOURCES += Runtime/runtime.c
+RUNTIME_SOURCES += Runtime/sched.c
+RUNTIME_SOURCES += Runtime/sched.h
+RUNTIME_SOURCES += Runtime/stdlib.h
+RUNTIME_SOURCES += Runtime/stdlib/actors.c
+RUNTIME_SOURCES += Runtime/stdlib/format.c
+RUNTIME_SOURCES += Runtime/stdlib/io.c
+RUNTIME_SOURCES += Runtime/stdlib/list.h
+RUNTIME_SOURCES += Runtime/stdlib/math.c
+RUNTIME_SOURCES += Runtime/stdlib/string.c
+RUNTIME_SOURCES += Runtime/stdlib/timing.c
+
 RUNTIME_ARTIFACTS=$(shell ls ./Runtime/*.{o,a,s,ll,out,h.gch})
 RUNTIME_EXECUTABLE=Runtime/runtime.o
 
-all: target ${EXECUTABLE} ${RUNTIME_EXECUTABLE}
+all: target ${EXECUTABLE}
 	@echo "* Building chakra executable and runtime"
-	@echo "${pwd}"
 
 target:
 	@echo "* Creating target directory"
@@ -37,22 +60,14 @@ ${EXECUTABLE}: ${COMPILER_EXE}
 	cp ${COMPILER_EXE} ${EXECUTABLE}
 
 ${COMPILER_EXE}: ${COMPILER_SOURCES} ${COMPILER_PROJECT_FILE}
-	@echo "* Building ${pwd}" $@
+	@echo "* Building" $@
 	dotnet publish ${COMPILER_PROJECT_FILE} -r ${RID} -c ${COMPILER_CONFIGURATION} -nologo -p:PublishSingleFile=true --self-contained -p:PublishReadyToRun=true
 
 .PHONY:
 
-clean: .PHONY
-	rm -f ${COMPILER_EXE} ${RUNTIME_ARTIFACTS} ${RUNTIME_EXECUTABLE} ${EXECUTABLE}
-
-${RUNTIME_EXECUTABLE}: ${RUNTIME_SOURCES}
-	@echo "* Building" $@
-	clang -c -gdwarf ${RUNTIME_SOURCES}
-
-install: ${INSTALL_EXE}
-
-${INSTALL_EXE}: ${EXECUTABLE}
-	cp ${EXECUTABLE} ${INSTALL_EXE}
-
 compiler_tests: .PHONY
 	dotnet test ${TEST_PROJECT_FILE} -r ${RID} -nologo
+
+clean: .PHONY
+
+install: ${INSTALL_EXE}
