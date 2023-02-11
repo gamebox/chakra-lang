@@ -7,9 +7,9 @@ Visit the [website](https://chakra-lang.dev) to learn more.
 
 [![Build Status](https://github.com/gamebox/chakra-lang/actions/workflows/makefile.yml/badge.svg?branch=master&event=push)](https://github.com/gamebox/chakra-lang/actions/workflows/makefile.yml)
 
-{% warning %}
-**WARNING!** This project is in very early, but active development. Nothing really works.
-{% endwarning %}
+> **Warning**
+> This project is in very early, but active development. Nothing really works.
+
 
 ## Capabilities Secure
 
