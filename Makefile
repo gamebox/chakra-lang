@@ -10,7 +10,7 @@ endif
 ifeq (${DEST},) 
 	DEST=/usr/local/bin
 endif
-BLAH=$(shell echo Runtime/**/*.{c, h})
+
 COMPILER_PROJECT_FILE=Compiler/Parser.fsproj
 TEST_PROJECT_FILE=Compiler/Tests/Tests.fsproj
 COMPILER_SOURCES=$(shell ls ./Compiler/*.fs)
@@ -37,7 +37,7 @@ ${EXECUTABLE}: ${COMPILER_EXE}
 	cp ${COMPILER_EXE} ${EXECUTABLE}
 
 ${COMPILER_EXE}: ${COMPILER_SOURCES} ${COMPILER_PROJECT_FILE}
-	@echo "* Building" $@
+	@echo "* Building ${pwd}" $@
 	dotnet publish ${COMPILER_PROJECT_FILE} -r ${RID} -c ${COMPILER_CONFIGURATION} -nologo -p:PublishSingleFile=true --self-contained -p:PublishReadyToRun=true
 
 .PHONY:
