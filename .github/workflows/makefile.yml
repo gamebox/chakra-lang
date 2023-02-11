@@ -33,6 +33,9 @@ jobs:
     - name: Run check
       run: dotnet test Compiler/Tests/Tests.fsproj -r linux-x64 -nologo
 
+    - name: Debug
+      run: ls
+
     - name: Check executable
       run: |
         ./target/chakra > TESTING.txt
