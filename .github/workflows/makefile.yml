@@ -22,8 +22,8 @@ jobs:
       with:
         version: latest
 
-    # - name: Build compiler and runtime
-    #   run: RID=linux-x64 make
+    - name: Build compiler and runtime
+      run: RID=linux-x64 make
 
     - name: Run check
       run: RID=linux-x64 make compiler_tests

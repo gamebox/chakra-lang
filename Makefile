@@ -12,14 +12,14 @@ ifeq (${DEST},)
 endif
 COMPILER_PROJECT_FILE=Compiler/Parser.fsproj
 TEST_PROJECT_FILE=Compiler/Tests/Tests.fsproj
-COMPILER_SOURCES=$(shell ls Compiler/*.fs)
+COMPILER_SOURCES=$(shell ls ./Compiler/*.fs)
 COMPILER_EXE=Compiler/bin/${COMPILER_CONFIGURATION}/${DOTNET_VERSION}/${RID}/publish/Parser
 INSTALL_EXE=${DEST}/chakra
 
 EXECUTABLE=target/chakra
 
-RUNTIME_SOURCES=$(shell ls Runtime/**/*.{c,h})
-RUNTIME_ARTIFACTS=$(shell ls Runtime/*.{o,a,s,ll,out,h.gch})
+RUNTIME_SOURCES=$(shell ls ./Runtime/**/*.{c,h})
+RUNTIME_ARTIFACTS=$(shell ls ./Runtime/*.{o,a,s,ll,out,h.gch})
 RUNTIME_EXECUTABLE=Runtime/runtime.o
 
 all: target ${EXECUTABLE} ${RUNTIME_EXECUTABLE}
