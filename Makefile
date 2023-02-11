@@ -25,6 +25,7 @@ RUNTIME_EXECUTABLE=Runtime/runtime.o
 
 all: target ${EXECUTABLE} ${RUNTIME_EXECUTABLE}
 	@echo "* Building chakra executable and runtime"
+	@echo "${pwd}"
 
 target:
 	@echo "* Creating target directory"
