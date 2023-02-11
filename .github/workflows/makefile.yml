@@ -22,6 +22,9 @@ jobs:
       with:
         version: latest
 
+    - name: LS Debug
+      run: ls Runtime/**/*.{c,h}
+
     - name: Build compiler and runtime
       run: RID=linux-x64 make
 
