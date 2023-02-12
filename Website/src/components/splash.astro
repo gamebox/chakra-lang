@@ -16,18 +16,19 @@ const sizes = "(min-width: 640px) 42vw, 67vw";
   </div>
   <div class="relative grid h-full place-items-center sm:grid-cols-1">
     <Logo classes="h-48 text-purple-600" />
-    <h2
-      class=""
-    >
-      <div
-        class="gradient-text text-center font-extrabold tracking-tighter text-8xl"
+    <slot>
+      <h2
+        class=""
       >
-        Build concurrent
-        <br /> applications,
-        <br /> easier.
-      </div>
-    </h2>
-
+        <div
+          class="gradient-text text-center font-extrabold tracking-tighter text-8xl"
+        >
+          Build concurrent
+          <br /> applications,
+          <br /> easier.
+        </div>
+      </h2>
+    </slot>
   </div>
 </section>
 

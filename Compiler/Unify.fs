@@ -280,6 +280,30 @@ let rec W nv gamma exp : int * ((Type * string) list * Type) =
         (nv, ([], StringType))
     | AST.ChakraNumber _ ->
         (nv, ([], NumberType))
+    | AST.ChakraTuple (_, exprs) ->
+        let rec wexprs nv ss tys es =
+            match es with
+            | [] -> (nv, (ss, TupleType (List.rev tys)))
+            | e::es ->
+                let (nv', (ss', tau1)) = W nv gamma e
+                let ss'' = compose ss' ss
+                wexprs nv' ss'' ((subs ss'' tau1)::tys) es
+        wexprs nv [] [] exprs
+    | AST.ChakraStruct (_, s) ->
+        let rec wfields nv ss tys (fs: AST.ChakraStructField list) =
+            match fs with
+            | [] -> (nv, (ss, StructType (List.sortBy (fst) tys, false)))
+            | ({ Loc = _; Name = n; Value = e})::es ->
+                let (nv', (ss', tau1)) = W nv gamma e
+                let ss'' = compose ss' ss
+                wfields nv' ss'' ((n, subs ss'' tau1)::tys) es
+        wfields nv [] [] s.Fields
+    | AST.ChakraMatchExpr (_, m) ->
+        raise (System.ApplicationException "Match expression inference not implemented")
+    | AST.ChakraPipeExpr p ->
+        raise (System.ApplicationException "Pipe inference not implemented")
+    | AST.ChakraLambda (_, l) ->
+        raise (System.ApplicationException "Lambda inference not implemented")
     | AST.ChakraList (_, { Items = items }) ->
         // Infer the type for each expression, then unify the types of each
         let rec itemsubs nv gamma s ty exps =
@@ -306,12 +330,12 @@ let rec W nv gamma exp : int * ((Type * string) list * Type) =
                 | (e :: es, t :: ts) ->
                     let (nv', (S1, tau1)) = W nv gamma e
                     let ss' = unify t tau1
-                    unifyArgs (compose ss S1) nv' es ts
+                    unifyArgs (compose ss' S1) nv' es ts
             let ss = unifyArgs [] nv args (List.map (snd) argTys)
-
+            let ret' = subs ss ret
             // if args all unify, use subs on ret
             // return result
-            (0, (ss, ret))
+            (0, (ss, ret'))
         | e ->
             raise (Assum (sprintf "Expected a function, found %O" e))
         
