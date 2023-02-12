@@ -7,7 +7,6 @@ open System.IO
 
 let loadFixture path =
     let p = Path.Combine([|__SOURCE_DIRECTORY__; "Fixtures"; "parsing"; @$"{path}.chakra"|])
-    printfn "Loading %s" p
     System.IO.File.ReadAllText(p)
 
 let assertThat (bool: bool) (label: string) =

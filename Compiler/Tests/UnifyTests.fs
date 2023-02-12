@@ -101,10 +101,12 @@ let stringL = AST.ChakraString (nullSpan, "")
 let numL = AST.ChakraNumber (nullSpan, System.Decimal 0)
 let varL v = AST.ChakraVar (nullSpan, (v, None))
 let listL items = AST.ChakraList (nullSpan, { Items = items; Spread = None })
+let tupL items = AST.ChakraTuple (nullSpan, items)
 let stringT = StringType
 let numT = NumberType
 let listT t = ListType t
 let appL n args = AST.ChakraApplyExpr (nullSpan, AST.ChakraApply ((n, []), args))
+let structL fields = AST.ChakraStruct (nullSpan, { Fields = List.map (fun (n, e) -> { Loc = nullSpan; Name = n; Value = e }) fields; Spread  = None })
 
 [<Test>]
 let ``String literal should be inferred as a string`` () =
@@ -138,22 +140,58 @@ let throwsExplicit (expr, gamma) (ex: 'a when 'a :> exn) =
         | e -> NUnit.Framework.Assert.AreEqual(e, ex)
 
 [<Test>]
-let ``List of literals should be inferred as the type of those literals`` () =
+let ``List of string literals should be inferred as List(String)`` () =
     infers (listL [ stringL ], [])  (listT stringT)
+[<Test>]
+let ``List of number literals should be inferred as List(Number)`` () =
     infers (listL [ numL ], []) (listT numT)
+[<Test>]
+let ``List of string var expressions should be inferred as List(String)`` () =
     infers (listL [ varL "a"], ["a", Type stringT]) (listT stringT)
+[<Test>]
+let ``List of different string type expressions should be inferred as List(String)`` () =
     infers (listL [ stringL; varL "a"; stringL], ["a", Type stringT]) (listT stringT)
-    fails (listL [ varL "a"], [ "a", Type stringT]) (listT numT)
+[<Test>]
+let ``List of different string type expressions with a generic var should be inferred as List(String)`` () =
     infers (listL [ stringL; varL "a"; stringL], ["a", Type genA]) (listT stringT)
+[<Test>]
+let ``List of expressions of different types should not unify`` () =
     throws (listL [ stringL; varL "a"; stringL], ["a", Type numT])
+[<Test>]
+let ``List of expressions where there is an undefined var should not unify`` () =
     throws (listL [ stringL; varL "a"; stringL], [])
 
 [<Test>]
 let ``Apply literals should be inferred correctly`` () =
     infers (appL "test" [stringL], ["test", Type (FunctionType ([("a", StringType)], StringType))]) (StringType)
     infers (appL "test" [varL "a"], ["test", Type (FunctionType ([("a", StringType)], StringType)); ("a", Type genA)]) (StringType)
+    infers (appL "test" [varL "a"], ["test", Type (FunctionType ([("a", genA)], genA)); ("a", Type StringType)]) (StringType)
     throwsExplicit (appL "test" [stringL], ["test", Type (FunctionType ([("a", StringType); ("b", NumberType)], StringType))]) (Unify Arity)
     throwsExplicit (appL "test" [stringL; numL], ["test", Type (FunctionType ([("a", StringType)], StringType))]) (Unify Arity)
     throwsExplicit (appL "test" [numL], ["test", Type (FunctionType ([("a", StringType)], StringType))]) (Unify Const)
-    // infers (appL "test" [stringL], ["test", Type (FunctionType ([("a", StringType)], StringType))]) (StringType)
-    // infers (appL "test" [stringL], ["test", Type (FunctionType ([("a", StringType)], StringType))]) (StringType)
+    infers (appL "test" [stringL], ["test", Type (FunctionType ([("a", StringType)], StringType))]) (StringType)
+    infers (appL "test" [stringL], ["test", Type (FunctionType ([("a", StringType)], StringType))]) (StringType)
+
+[<Test>]
+let ``Unit literal should be inferred as ()`` () =
+    infers (tupL [], []) (TupleType [])
+
+[<Test>]
+let ``Tuple literal with one string literal should be inferred as (String)`` () =
+    infers (tupL [stringL], []) (TupleType [stringT])
+
+[<Test>]
+let ``Tuple literal with one string var should be inferred as (String)`` () =
+    infers (tupL [varL "a"], ["a", Type stringT]) (TupleType [stringT])
+
+[<Test>]
+let ``Tuple literal with a string literal and a number literal should be inferred as (String, Number)`` () =
+    infers (tupL [stringL; numL], []) (TupleType [stringT; numT])
+
+[<Test>]
+let ``Struct literal with one string literal field should be inferred as %(one = String)`` () =
+    infers (structL ["one", stringL], []) (StructType (["one", stringT], false))
+
+[<Test>]
+let ``Struct literal with one field assigned to a string var should be inferred as %(one = String)`` () =
+    infers (structL ["one", varL "a"], ["a", Type stringT]) (StructType (["one", stringT], false))
