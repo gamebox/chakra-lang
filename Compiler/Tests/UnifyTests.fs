@@ -106,6 +106,7 @@ let stringT = StringType
 let numT = NumberType
 let listT t = ListType t
 let appL n args = AST.ChakraApplyExpr (nullSpan, AST.ChakraApply ((n, []), args))
+let structWSL fields spread = AST.ChakraStruct (nullSpan, { Fields = List.map (fun (n, e) -> { Loc = nullSpan; Name = n; Value = e }) fields; Spread  = Some (nullSpan, spread) })
 let structL fields = AST.ChakraStruct (nullSpan, { Fields = List.map (fun (n, e) -> { Loc = nullSpan; Name = n; Value = e }) fields; Spread  = None })
 
 [<Test>]
@@ -195,3 +196,11 @@ let ``Struct literal with one string literal field should be inferred as %(one =
 [<Test>]
 let ``Struct literal with one field assigned to a string var should be inferred as %(one = String)`` () =
     infers (structL ["one", varL "a"], ["a", Type stringT]) (StructType (["one", stringT], false))
+
+[<Test>]
+let ``Struct literal with one field assigned to a string var and two field assigned to number literal should be inferred as %(one = String, two = Number)`` () =
+    infers (structL ["two", numL; "one", varL "a"], ["a", Type stringT]) (StructType (["one", stringT; "two", numT], false))
+
+[<Test>]
+let ``Struct literal one field assign to a string var and a spread pointing to a struct type containing such a field should be inferred as %(one = String)`` () =
+    infers (structWSL ["one", stringL] "s", ["s", Type (StructType (["one", stringT], false))]) (StructType (["one", stringT], false))

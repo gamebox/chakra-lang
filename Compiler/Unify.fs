@@ -297,7 +297,14 @@ let rec W nv gamma exp : int * ((Type * string) list * Type) =
                 let (nv', (ss', tau1)) = W nv gamma e
                 let ss'' = compose ss' ss
                 wfields nv' ss'' ((n, subs ss'' tau1)::tys) es
-        wfields nv [] [] s.Fields
+        match s.Spread with
+        | Some (span, spread) ->
+            let (nv', (ss', t)) = wfields nv [] [] s.Fields
+            let (nv'', (ss'', t1)) = W nv gamma (AST.ChakraVar (span, (spread, None)))
+            let ss'' = unify t t1
+            (nv', (ss', t))
+        | None ->
+            wfields nv [] [] s.Fields
     | AST.ChakraMatchExpr (_, m) ->
         raise (System.ApplicationException "Match expression inference not implemented")
     | AST.ChakraPipeExpr p ->
